@@ -140,7 +140,21 @@ class Speaker(context: Context) {
         } else {
             t.setLanguage(locale)
         }
+        preferMaleVoice(t)
         return t.speak(text.take(3000), TextToSpeech.QUEUE_FLUSH, null, "rwai-" + System.nanoTime()) == TextToSpeech.SUCCESS
+    }
+
+    /** Руся — мужского рода: по возможности выбираем мужской голос (определяется по имени голоса; если такого нет — остаётся системный). */
+    private fun preferMaleVoice(t: TextToSpeech) {
+        try {
+            val lang = t.voice?.locale?.language ?: return
+            val male = t.voices.orEmpty().filter { v ->
+                val n = v.name.lowercase()
+                v.locale.language == lang && !v.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) &&
+                    (n.contains("-rud-") || n.contains("smtm") || (n.contains("male") && !n.contains("female")))
+            }
+            male.firstOrNull { !it.isNetworkConnectionRequired }?.let { t.voice = it } ?: male.firstOrNull()?.let { t.voice = it }
+        } catch (_: Exception) { }
     }
 
     fun stop() { tts?.stop() }

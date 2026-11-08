@@ -20,3 +20,10 @@ class SpeakableTest {
 
     @Test fun shortTextUntouched() = assertEquals("Готово", Speakable.clean("Готово"))
 }
+
+class IdentityPromptTest {
+    @Test fun agentKnowsNameCreatorAndGender() {
+        val p = SystemPrompt.build()
+        assertTrue(p.contains("Руся")); assertTrue(p.contains("RusWeo")); assertTrue(p.contains("мужского рода"))
+    }
+}
