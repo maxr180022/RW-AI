@@ -176,8 +176,13 @@ class AndroidToolExecutor(
         }
     }
 
-    private fun inputText(text: String): ToolResult {
+    private fun inputText(rawText: String): ToolResult {
         val svc = RwAccessibilityService.instance ?: return noService()
+        val expanded = com.rwai.agent.logic.ProfileTemplates.expand(rawText, com.rwai.agent.Graph.profile.values())
+        if (expanded.missing.isNotEmpty()) {
+            return ToolResult.failed("В профиле владельца нет полей: " + expanded.missing.joinToString(", ") + ". Спроси владельца или попроси заполнить раздел «Профиль».")
+        }
+        val text = expanded.text
         return withScreen { cap ->
             when (val r = svc.setText(cap, text)) {
                 is RwAccessibilityService.InputResult.Ok -> ToolResult.ok("Текст введён в поле (${text.length} симв.). Сообщение НЕ отправлено.")

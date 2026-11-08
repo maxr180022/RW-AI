@@ -62,8 +62,13 @@ fun SettingsHost(resumeTick: Int, section: Int, onSection: (Int) -> Unit) {
         ) {
             FilterChip(selected = section == 0, onClick = { onSection(0) }, label = { Text("Доступ") })
             FilterChip(selected = section == 1, onClick = { onSection(1) }, label = { Text("Параметры") })
+            FilterChip(selected = section == 2, onClick = { onSection(2) }, label = { Text("Профиль") })
         }
-        if (section == 0) PermissionsScreen(resumeTick) else SettingsScreen()
+        when (section) {
+            0 -> PermissionsScreen(resumeTick)
+            1 -> SettingsScreen()
+            else -> ProfileScreen()
+        }
     }
 }
 

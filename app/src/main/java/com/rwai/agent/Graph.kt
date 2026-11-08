@@ -21,6 +21,7 @@ object Graph {
     fun appContext(): Context = app
 
     val secretStore: SecretStore by lazy { SecretStore(app) }
+    val profile: com.rwai.agent.security.ProfileStore by lazy { com.rwai.agent.security.ProfileStore(secretStore) }
     val settings: SettingsStore by lazy { SettingsStore(app, secretStore) }
     val db: RwDb by lazy { RwDb(app) }
     val speaker: Speaker by lazy { Speaker(app) }

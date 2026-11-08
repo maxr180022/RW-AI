@@ -86,6 +86,13 @@ class ConfirmationPolicy(
         fun isUserOnlyLabel(label: String): Boolean = userOnly.containsMatchIn(label)
     }
 
+    /** Приложения, в которых владелец уже разрешил ввод данных профиля в этой задаче. */
+    private val profileApproved = HashSet<String>()
+
+    fun noteApproved(call: ToolCall, ctx: ActionContext) {
+        if (call.tool == "input_text" && ProfileTemplates.hasPlaceholders(call.str("text").orEmpty())) profileApproved += ctx.currentApp.orEmpty()
+    }
+
     fun evaluate(call: ToolCall, ctx: ActionContext): PolicyDecision {
         return when (call.tool) {
             "tap_text" -> evaluateTap(call.str("text").orEmpty(), ctx)
@@ -93,6 +100,14 @@ class ConfirmationPolicy(
                 val text = call.str("text").orEmpty()
                 if (SecretRedactor.containsSecret(text, protectedSecrets())) {
                     PolicyDecision.Deny("Нельзя вводить в приложения ключи и секреты RW AI.")
+                } else if (ProfileTemplates.hasPlaceholders(text) && ctx.currentApp.orEmpty() !in profileApproved) {
+                    PolicyDecision.Confirm(
+                        title = "Ввести ваши личные данные",
+                        details = "В приложении «${ctx.currentApp ?: "?"}» будут введены поля профиля: " + ProfileTemplates.keysIn(text).joinToString(", ") +
+                            ". Значения берутся на телефоне и модели не показываются.",
+                        reason = "Личные данные вводятся только с вашего разрешения (подтверждение действует для этого приложения до конца задачи).",
+                        dangerous = false,
+                    )
                 } else PolicyDecision.Allow
             }
             "show_draft" -> {

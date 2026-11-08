@@ -180,9 +180,11 @@ class AgentController(
         val speakNow = speakTask
         val origin = originPkg
         var movedApps = false
-        val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t), s.language) }
+        val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t, russian = s.language.startsWith("ru")), s.language) }
         val secrets = { listOfNotNull(settings.apiKey()) }
-        val redact: (String) -> String = { SecretRedactor.redact(it, secrets()) }
+        val profileValues = com.rwai.agent.Graph.profile.values()
+        // Ни ключи, ни личные данные профиля не уходят модели и в журнал: вместо значений — плейсхолдеры.
+        val redact: (String) -> String = { com.rwai.agent.logic.ProfileTemplates.redact(SecretRedactor.redact(it, secrets()), profileValues) }
         val sink = ActivitySink { e ->
             if (e.kind == "tool" && e.tool in APP_SWITCHING_TOOLS && !e.status.startsWith("denied")) movedApps = true
             try { db.logActivity(taskId, e.kind, e.tool, redact(e.detail), e.status) } catch (_: Exception) { }
@@ -195,7 +197,7 @@ class AgentController(
             confirmer = UiConfirmer(),
             sink = sink,
             policy = ConfirmationPolicy(s.mode, s.autoSend, secrets),
-            systemPrompt = SystemPrompt.build(s.languageName),
+            systemPrompt = SystemPrompt.build(s.languageName, profileValues.keys.toList(), com.rwai.agent.Graph.profile.about()),
             redact = redact,
             onStatus = { st -> _state.update { it.copy(status = st) } },
         )
