@@ -2,6 +2,7 @@
 <resources>
     <style name="Theme.RWAI" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/rw_window_bg</item>
     </style>
 </resources>

@@ -1,5 +1,6 @@
 package com.rwai.agent.notifications
 
+import com.rwai.agent.logic.BankGuard
 import android.app.Notification
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
@@ -39,6 +40,7 @@ class RwNotificationListener : NotificationListenerService() {
         if (!settings.captureNotifications) return
         if (n.packageName == packageName) return
         if (n.packageName in settings.excludedPackages()) return
+        if (BankGuard.isBankingPackage(n.packageName)) return // банковские уведомления не сохраняются никогда
         val notif = n.notification ?: return
         val flags = notif.flags
         if (flags and Notification.FLAG_ONGOING_EVENT != 0) return

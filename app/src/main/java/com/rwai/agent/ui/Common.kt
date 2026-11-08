@@ -2,9 +2,9 @@ package com.rwai.agent.ui
 
 import android.content.ComponentName
 import android.content.Context
-import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,27 +12,35 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Surface
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import com.rwai.agent.Graph
+import com.rwai.agent.R
+import com.rwai.agent.core.IncomingShare
 import com.rwai.agent.accessibility.RwAccessibilityService
 
 fun isNotificationAccessEnabled(ctx: Context): Boolean =
@@ -44,44 +52,69 @@ fun isAccessibilityEnabled(ctx: Context): Boolean {
     return enabled.split(':').any { ComponentName.unflattenFromString(it) == expected }
 }
 
-@Composable
-fun RwTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val ctx = LocalContext.current
-    val scheme = when {
-        Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(ctx)
-        Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(ctx)
-        dark -> darkColorScheme()
-        else -> lightColorScheme()
-    }
-    MaterialTheme(colorScheme = scheme, content = content)
+private enum class Dest(val title: String, val icon: String) {
+    AGENT("Агент", "💬"),
+    INBOX("Входящие", "📥"),
+    MEMORY("Память", "🧠"),
+    LOG("Журнал", "📜"),
+    SETTINGS("Ещё", "⚙️"),
 }
 
-private val TAB_TITLES = listOf("Ассистент", "Входящие", "Память", "Журнал", "Доступ", "Настройки")
-
 @Composable
-fun RwRoot(resumeTick: Int) {
+fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
+    val hasKey by Graph.settings.hasApiKey.collectAsState()
+    // Окно подключения показывается, пока нет ключа, и остаётся до нажатия «Начать работу».
+    var wizard by rememberSaveable { mutableStateOf(!Graph.settings.hasApiKey.value) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            Text(
-                "RW AI",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
-            )
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                TAB_TITLES.forEachIndexed { i, title ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
+    var settingsSection by rememberSaveable { mutableIntStateOf(0) }
+
+    if (wizard || !hasKey) {
+        SetupScreen(resumeTick = resumeTick, onBegin = { wizard = true }, onFinish = { wizard = false })
+        return
+    }
+
+    // Жест ассистента или «Поделиться» из Галереи всегда ведут на вкладку «Агент».
+    val shared by IncomingShare.uris.collectAsState()
+    LaunchedEffect(voiceTick, shared) {
+        if (voiceTick > 0 || shared.isNotEmpty()) tab = Dest.AGENT.ordinal
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                Dest.entries.forEachIndexed { i, d ->
+                    NavigationBarItem(
+                        selected = tab == i,
+                        onClick = { tab = i },
+                        icon = { Text(d.icon, fontSize = 20.sp) },
+                        label = { Text(d.title, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
                 }
             }
+        },
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            AppHeader(Dest.entries[tab].title)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                when (tab) {
-                    0 -> AssistantScreen()
-                    1 -> InboxScreen(resumeTick)
-                    2 -> MemoryScreen()
-                    3 -> ActivityScreen()
-                    4 -> PermissionsScreen(resumeTick)
-                    else -> SettingsScreen()
+                when (Dest.entries[tab]) {
+                    Dest.AGENT -> AssistantScreen(
+                        onFixAccess = {
+                            settingsSection = 0
+                            tab = Dest.SETTINGS.ordinal
+                        },
+                        resumeTick = resumeTick,
+                        voiceRequest = voiceTick,
+                    )
+                    Dest.INBOX -> InboxScreen(resumeTick)
+                    Dest.MEMORY -> MemoryScreen()
+                    Dest.LOG -> ActivityScreen()
+                    Dest.SETTINGS -> SettingsHost(resumeTick, settingsSection) { settingsSection = it }
                 }
             }
         }
@@ -89,8 +122,38 @@ fun RwRoot(resumeTick: Int) {
 }
 
 @Composable
+private fun AppHeader(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        BrandMark(36.dp)
+        Column {
+            Text("RW AI", style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Логотип приложения на белой скруглённой плашке. */
+@Composable
+fun BrandMark(size: Dp) {
+    Box(
+        modifier = Modifier.size(size).clip(RoundedCornerShape(size / 3.2f)).background(Color.White),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.rw_logo),
+            contentDescription = "RW AI",
+            modifier = Modifier.size(size),
+        )
+    }
+}
+
+@Composable
 fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp))
 }
 
 @Composable

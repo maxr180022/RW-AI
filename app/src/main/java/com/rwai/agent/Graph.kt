@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.rwai.agent.brain.DeepSeekClient
 import com.rwai.agent.core.AgentController
+import com.rwai.agent.core.AgentNotifications
 import com.rwai.agent.data.RwDb
 import com.rwai.agent.security.SecretStore
 import com.rwai.agent.settings.SettingsStore
@@ -17,6 +18,8 @@ object Graph {
         app = context.applicationContext
     }
 
+    fun appContext(): Context = app
+
     val secretStore: SecretStore by lazy { SecretStore(app) }
     val settings: SettingsStore by lazy { SettingsStore(app, secretStore) }
     val db: RwDb by lazy { RwDb(app) }
@@ -29,5 +32,10 @@ class RwApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
+        try {
+            if (Graph.settings.current.quickReply && Graph.settings.hasApiKey.value) AgentNotifications.showQuick(this)
+        } catch (_: Exception) {
+            // уведомление — удобство, а не обязательная функция
+        }
     }
 }

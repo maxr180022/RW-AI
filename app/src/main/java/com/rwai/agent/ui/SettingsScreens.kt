@@ -51,6 +51,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+
+/** Вкладка «Ещё»: два раздела — «Доступ» (разрешения) и «Параметры». */
+@Composable
+fun SettingsHost(resumeTick: Int, section: Int, onSection: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(selected = section == 0, onClick = { onSection(0) }, label = { Text("Доступ") })
+            FilterChip(selected = section == 1, onClick = { onSection(1) }, label = { Text("Параметры") })
+        }
+        if (section == 0) PermissionsScreen(resumeTick) else SettingsScreen()
+    }
+}
+
 @Composable
 fun PermissionsScreen(resumeTick: Int) {
     val ctx = LocalContext.current
@@ -103,6 +119,32 @@ fun PermissionsScreen(resumeTick: Int) {
         )
         Card {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Ассистент по умолчанию", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Чтобы долгое нажатие кнопки «Домой» или боковой кнопки открывало RW AI вместо Google: нажмите кнопку ниже и выберите RW AI в пункте «Цифровой помощник». " +
+                        "На Samsung также проверьте: Настройки → Дополнительные функции → Боковая кнопка → Нажатие и удержание → «Открыть цифровой помощник».",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(onClick = {
+                    try {
+                        ctx.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e: Exception) {
+                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }) { Text("Выбрать ассистента") }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("🔒 Банки закрыты для агента", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "RW AI не открывает банковские и платёжные приложения и сайты, не читает их экран и не сохраняет их уведомления. Это правило нельзя отключить.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        Card {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Экономия заряда (по желанию)", style = MaterialTheme.typography.titleSmall)
                 Text("Если Samsung «усыпляет» RW AI и уведомления перестают сохраняться: Настройки → Приложения → RW AI → Батарея → «Без ограничений».", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }) {
@@ -112,33 +154,7 @@ fun PermissionsScreen(resumeTick: Int) {
         }
     }
 
-    if (showA11yInfo) {
-        AlertDialog(
-            onDismissRequest = { showA11yInfo = false },
-            title = { Text("Включение управления интерфейсом") },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Что сможет RW AI: видеть текст и кнопки на экране, нажимать их, прокручивать, вводить текст, нажимать «Назад» — только во время вашей задачи.")
-                    Text("Чего не будет: чтения паролей, обхода блокировки экрана, биометрии и CAPTCHA, скрытой слежки. Отправка, оплата и удаление — только с вашего подтверждения.")
-                    Text("Если на следующем экране RW AI серого цвета и появляется сообщение «Ограниченная настройка» (Android 13+): сначала нажмите «Параметры приложения», затем ⋮ (три точки справа сверху) → «Разрешить ограниченные настройки», потом вернитесь и включите службу.")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showA11yInfo = false
-                    ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }) { Text("Открыть настройки") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showA11yInfo = false
-                    ctx.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }) { Text("Параметры приложения") }
-            },
-        )
-    }
+    if (showA11yInfo) AccessibilityHelpDialog(onDismiss = { showA11yInfo = false })
 }
 
 @Composable
@@ -237,6 +253,16 @@ fun SettingsScreen() {
             }, enabled = hasKey && !checking) { Text("Проверить соединение") }
         }
         checkResult?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+
+        SwitchRow(
+            "Быстрая команда в шторке",
+            "Постоянное уведомление с полем «Написать RW AI»: команду можно ввести, не открывая приложение. Работает только на разблокированном телефоне.",
+            settings.quickReply,
+        ) { v ->
+            Graph.settings.update { it.copy(quickReply = v) }
+            val appCtx = Graph.appContext()
+            if (v) com.rwai.agent.core.AgentNotifications.showQuick(appCtx) else com.rwai.agent.core.AgentNotifications.cancelQuick(appCtx)
+        }
 
         SectionTitle("Автономность")
         AutonomyMode.entries.forEach { m ->

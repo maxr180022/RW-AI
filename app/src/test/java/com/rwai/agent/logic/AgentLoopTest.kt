@@ -58,6 +58,25 @@ class AgentLoopTest {
         assertEquals(listOf("launch_app", "inspect_screen"), exec.calls.map { it.tool })
     }
 
+    @Test fun photosGoIntoFirstUserMessageWithDataWarning() = runBlocking {
+        val model = ScriptedModel(listOf(finish(true, "На фото чек")))
+        val out = loop(model, FakeExecutor()).run("Что на фото?", listOf("data:image/jpeg;base64,AAAA", "data:image/jpeg;base64,BBBB"))
+        assertTrue(out is AgentOutcome.Finished)
+        val first = model.seen[0].first { it.role == "user" }
+        assertEquals(2, first.images.size)
+        assertTrue(first.content.contains("приложено фото: 2"))
+        assertTrue(first.content.contains("ДАННЫЕ"))
+        assertTrue(model.seen[0].none { it.role != "user" && it.images.isNotEmpty() })
+    }
+
+    @Test fun noPhotosMeansPlainTextMessage() = runBlocking {
+        val model = ScriptedModel(listOf(finish()))
+        loop(model, FakeExecutor()).run("привет")
+        val first = model.seen[0].first { it.role == "user" }
+        assertTrue(first.images.isEmpty())
+        assertFalse(first.content.contains("фото"))
+    }
+
     @Test fun invalidReplyIsReportedBackAndRecovered() = runBlocking {
         val model = ScriptedModel(listOf("не json", act("press_back"), finish()))
         val out = loop(model, FakeExecutor()).run("назад")

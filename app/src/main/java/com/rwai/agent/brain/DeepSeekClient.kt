@@ -105,7 +105,16 @@ class DeepSeekClient(
     internal fun buildBody(model: String, thinking: Boolean, messages: List<ChatMessage>): String {
         val map = LinkedHashMap<String, Any?>()
         map["model"] = model
-        map["messages"] = messages.map { mapOf("role" to it.role, "content" to it.content) }
+        map["messages"] = messages.map { m ->
+            if (m.images.isEmpty() || m.role != "user") {
+                mapOf("role" to m.role, "content" to m.content)
+            } else {
+                val blocks = ArrayList<Any?>()
+                blocks += mapOf("type" to "text", "text" to m.content)
+                m.images.forEach { url -> blocks += mapOf("type" to "image_url", "image_url" to mapOf("url" to url)) }
+                mapOf("role" to m.role, "content" to blocks)
+            }
+        }
         map["stream"] = false
         map["thinking"] = mapOf("type" to if (thinking) "enabled" else "disabled")
         map["max_tokens"] = if (thinking) 32768 else 4096

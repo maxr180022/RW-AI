@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.rwai.agent.Graph
@@ -62,19 +63,26 @@ object AgentNotifications {
     const val ID_RUNNING = 1001
     const val ID_CONFIRM = 1002
     const val ID_RESULT = 1003
+    const val ID_QUICK = 1004
     const val CH_RUNNING = "rwai_running"
     const val CH_CONFIRM = "rwai_confirm"
     const val CH_RESULT = "rwai_result"
+    const val CH_QUICK = "rwai_quick"
+    const val KEY_QUICK_TEXT = "rwai_quick_text"
 
     const val ACTION_APPROVE = "com.rwai.agent.action.APPROVE"
     const val ACTION_DECLINE = "com.rwai.agent.action.DECLINE"
     const val ACTION_STOP = "com.rwai.agent.action.STOP"
+    const val ACTION_QUICK = "com.rwai.agent.action.QUICK"
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(NotificationChannel(CH_RUNNING, "Выполнение задачи", NotificationManager.IMPORTANCE_LOW))
         nm.createNotificationChannel(NotificationChannel(CH_CONFIRM, "Запросы подтверждения", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel(CH_RESULT, "Результаты задач", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(
+            NotificationChannel(CH_QUICK, "Быстрая команда в шторке", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
+        )
     }
 
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
@@ -140,6 +148,42 @@ object AgentNotifications {
         notifySafely(context, ID_RESULT, n)
     }
 
+
+    /**
+     * Постоянное уведомление с полем ввода: команду можно написать прямо из шторки, не открывая приложение.
+     * Действие требует разблокированного телефона (Android 12+), чтобы агентом нельзя было управлять с экрана блокировки.
+     */
+    fun showQuick(context: Context, status: String? = null) {
+        ensureChannels(context)
+        val remoteInput = RemoteInput.Builder(KEY_QUICK_TEXT).setLabel("Команда для RW AI…").build()
+        val replyIntent = PendingIntent.getBroadcast(
+            context, 4, Intent(context, AgentActionReceiver::class.java).setAction(ACTION_QUICK),
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val action = NotificationCompat.Action.Builder(0, "Написать RW AI", replyIntent)
+            .addRemoteInput(remoteInput)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .setAuthenticationRequired(true)
+            .build()
+        val n = NotificationCompat.Builder(context, CH_QUICK)
+            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setContentTitle("RW AI")
+            .setContentText(status ?: "Нажмите «Написать RW AI» и введите команду")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setContentIntent(openApp(context))
+            .addAction(action)
+            .build()
+        notifySafely(context, ID_QUICK, n)
+    }
+
+    fun cancelQuick(context: Context) {
+        NotificationManagerCompat.from(context).cancel(ID_QUICK)
+    }
+
     fun clearResult(context: Context) {
         NotificationManagerCompat.from(context).cancel(ID_RESULT)
     }
@@ -159,6 +203,15 @@ class AgentActionReceiver : BroadcastReceiver() {
             AgentNotifications.ACTION_APPROVE -> Graph.controller.resolveConfirmation(true)
             AgentNotifications.ACTION_DECLINE -> Graph.controller.resolveConfirmation(false)
             AgentNotifications.ACTION_STOP -> Graph.controller.stop()
+            AgentNotifications.ACTION_QUICK -> {
+                val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(AgentNotifications.KEY_QUICK_TEXT)?.toString()?.trim().orEmpty()
+                if (text.isNotEmpty()) {
+                    Graph.controller.submit(text)
+                    AgentNotifications.showQuick(context, "Принято: " + text.take(60))
+                } else {
+                    AgentNotifications.showQuick(context)
+                }
+            }
         }
     }
 }

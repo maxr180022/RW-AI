@@ -40,7 +40,12 @@ data class Draft(val recipient: String, val app: String, val text: String)
 
 enum class ChatRole { USER, AGENT, SYSTEM, ERROR }
 
-data class ChatEntry(val role: ChatRole, val text: String, val ts: Long = System.currentTimeMillis())
+data class ChatEntry(
+    val role: ChatRole,
+    val text: String,
+    val ts: Long = System.currentTimeMillis(),
+    val thumbs: List<android.graphics.Bitmap> = emptyList(),
+)
 
 enum class Phase { IDLE, RUNNING, WAITING_CONFIRMATION, WAITING_INPUT }
 
@@ -75,8 +80,8 @@ class AgentController(
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     @Synchronized
-    fun submit(raw: String) {
-        val text = raw.trim()
+    fun submit(raw: String, photos: List<AttachedImage> = emptyList()) {
+        val text = raw.trim().ifEmpty { if (photos.isNotEmpty()) "Посмотри приложенные фото и кратко опиши, что на них важного." else "" }
         if (text.isEmpty()) return
         if (job?.isActive == true) {
             addChat(ChatRole.SYSTEM, "Предыдущая задача ещё выполняется. Дождитесь её завершения или нажмите «Стоп».")
@@ -89,11 +94,11 @@ class AgentController(
         val original = pendingQuestion?.first ?: text
         val command = pendingQuestion?.let { (orig, q) -> "Исходная задача: $orig\nТы спросил: $q\nОтвет владельца: $text" } ?: text
         pendingQuestion = null
-        addChat(ChatRole.USER, text)
+        addChat(ChatRole.USER, text, photos.map { it.thumb })
         val taskId = System.currentTimeMillis()
         AgentService.start(appContext)
         _state.update { it.copy(phase = Phase.RUNNING, status = "Начинаю…", task = text, steps = emptyList(), draft = null, confirmation = null) }
-        job = scope.launch { runTask(taskId, command, original) }
+        job = scope.launch { runTask(taskId, command, original, photos.map { it.dataUrl }) }
     }
 
     fun stop() {
@@ -130,7 +135,7 @@ class AgentController(
 
     // ------------------------------------------------------------------ выполнение
 
-    private suspend fun runTask(taskId: Long, command: String, original: String) {
+    private suspend fun runTask(taskId: Long, command: String, original: String, images: List<String> = emptyList()) {
         val s = settings.current
         val secrets = { listOfNotNull(settings.apiKey()) }
         val redact: (String) -> String = { SecretRedactor.redact(it, secrets()) }
@@ -150,7 +155,7 @@ class AgentController(
             onStatus = { st -> _state.update { it.copy(status = st) } },
         )
         try {
-            when (val outcome = loop.run(command)) {
+            when (val outcome = loop.run(command, images)) {
                 is AgentOutcome.Finished -> {
                     addChat(ChatRole.AGENT, (if (outcome.success) "" else "Не удалось полностью выполнить задачу.\n") + outcome.summary)
                     try { db.addMemory("task", null, null, command.take(200), outcome.summary) } catch (_: Exception) { }
@@ -215,8 +220,8 @@ class AgentController(
         _state.update { it.copy(phase = Phase.IDLE, status = status, confirmation = null) }
     }
 
-    private fun addChat(role: ChatRole, text: String) {
-        _state.update { it.copy(chat = (it.chat + ChatEntry(role, text)).takeLast(200)) }
+    private fun addChat(role: ChatRole, text: String, thumbs: List<android.graphics.Bitmap> = emptyList()) {
+        _state.update { it.copy(chat = (it.chat + ChatEntry(role, text, thumbs = thumbs)).takeLast(200)) }
     }
 
     private fun pushStep(e: ActivityEvent, redact: (String) -> String) {

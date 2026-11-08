@@ -25,6 +25,8 @@ data class Settings(
     val maskCodes: Boolean = true,
     val excludedApps: String = "",
     val dailyTokenCap: Int = 0,
+    /** Постоянное уведомление с полем «Написать RW AI» в шторке. */
+    val quickReply: Boolean = true,
 ) {
     val languageName: String
         get() = when (language.substringBefore('-')) {
@@ -72,6 +74,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             maskCodes = prefs.getBoolean("maskCodes", d.maskCodes),
             excludedApps = prefs.getString("excludedApps", d.excludedApps) ?: d.excludedApps,
             dailyTokenCap = prefs.getInt("dailyTokenCap", d.dailyTokenCap),
+            quickReply = prefs.getBoolean("quickReply", d.quickReply),
         )
     }
 
@@ -83,7 +86,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putBoolean("speakResults", s.speakResults).putBoolean("voiceAutoRun", s.voiceAutoRun)
             .putInt("retentionDays", s.retentionDays).putBoolean("captureNotifications", s.captureNotifications)
             .putBoolean("maskCodes", s.maskCodes).putString("excludedApps", s.excludedApps)
-            .putInt("dailyTokenCap", s.dailyTokenCap)
+            .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply)
             .apply()
         _state.value = s
     }

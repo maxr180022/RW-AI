@@ -9,6 +9,7 @@ import com.rwai.agent.accessibility.RwAccessibilityService
 import com.rwai.agent.core.Draft
 import com.rwai.agent.data.RwDb
 import com.rwai.agent.logic.AppAliases
+import com.rwai.agent.logic.BankGuard
 import com.rwai.agent.logic.LabelClassifier
 import com.rwai.agent.logic.ToolCall
 import com.rwai.agent.logic.ToolExecutor
@@ -71,7 +72,9 @@ class AndroidToolExecutor(
 
     private suspend fun launchApp(name: String): ToolResult {
         val pm = context.packageManager
+        if (BankGuard.isBankingLabel(name)) return ToolResult.failed(BankGuard.REFUSAL)
         val pkg = resolvePackage(name) ?: return ToolResult.failed("Приложение «$name» не найдено среди установленных.")
+        if (BankGuard.isBanking(pkg, labelOf(pkg))) return ToolResult.failed(BankGuard.REFUSAL)
         val intent = pm.getLaunchIntentForPackage(pkg) ?: return ToolResult.failed("У приложения «$name» нет экрана запуска.")
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (isLocked()) return lockedResult()
@@ -90,6 +93,7 @@ class AndroidToolExecutor(
     }
 
     private suspend fun openUrl(url: String): ToolResult {
+        if (BankGuard.isBankingUrl(url)) return ToolResult.failed(BankGuard.REFUSAL)
         if (isLocked()) return lockedResult()
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
@@ -128,6 +132,7 @@ class AndroidToolExecutor(
         val cap = svc.capture() ?: return ToolResult.failed("Нет активного окна: экран пуст или приложение защитило содержимое.")
         try {
             if (cap.packageName == context.packageName) return ToolResult.failed("Агент не работает с экраном самого RW AI.")
+            if (BankGuard.isBanking(cap.packageName, cap.packageName?.let { labelOf(it) })) return ToolResult.failed(BankGuard.REFUSAL)
             return block(cap)
         } finally {
             cap.release()

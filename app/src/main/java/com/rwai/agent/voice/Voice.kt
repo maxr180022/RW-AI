@@ -30,7 +30,7 @@ class VoiceInput(private val context: Context) {
             onFail("На телефоне нет службы распознавания речи (установите/включите «Google» или голосовой ввод Samsung).")
             return
         }
-        val r = SpeechRecognizer.createSpeechRecognizer(context)
+        val r = createRecognizer()
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = onListening()
@@ -62,6 +62,19 @@ class VoiceInput(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
         r.startListening(intent)
+    }
+
+    /** Выбирает настоящую службу распознавания (Google, затем любая другая), но не заглушку самого RW AI. */
+    private fun createRecognizer(): SpeechRecognizer {
+        val services = context.packageManager.queryIntentServices(Intent(android.speech.RecognitionService.SERVICE_INTERFACE), 0)
+            .map { it.serviceInfo }
+            .filter { it.packageName != context.packageName }
+        val chosen = services.firstOrNull { it.packageName.contains("google") } ?: services.firstOrNull()
+        return if (chosen != null) {
+            SpeechRecognizer.createSpeechRecognizer(context, android.content.ComponentName(chosen.packageName, chosen.name))
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        }
     }
 
     fun stop() {

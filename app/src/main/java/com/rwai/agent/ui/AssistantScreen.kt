@@ -4,6 +4,32 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.activity.result.PickVisualMediaRequest
+import com.rwai.agent.core.AttachedImage
+import com.rwai.agent.core.IncomingShare
+import com.rwai.agent.core.PhotoEncoder
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,16 +68,48 @@ import com.rwai.agent.core.Phase
 import com.rwai.agent.voice.VoiceInput
 
 @Composable
-fun AssistantScreen() {
+fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: Int = 0) {
     val ctx = LocalContext.current
     val state by Graph.controller.state.collectAsState()
-    val hasKey by Graph.settings.hasApiKey.collectAsState()
+    val a11yOn = remember(resumeTick) { isAccessibilityEnabled(ctx) }
     val settings by Graph.settings.state.collectAsState()
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var voiceNote by remember { mutableStateOf<String?>(null) }
     val voice = remember { VoiceInput(ctx) }
     DisposableEffect(Unit) { onDispose { voice.stop() } }
+
+    val scope = rememberCoroutineScope()
+    var photos by remember { mutableStateOf<List<AttachedImage>>(emptyList()) }
+    var photoNote by remember { mutableStateOf<String?>(null) }
+    val addUris: (List<android.net.Uri>) -> Unit = { uris ->
+        scope.launch {
+            var failed = 0
+            val added = ArrayList<AttachedImage>()
+            for (u in uris) {
+                if (photos.size + added.size >= PhotoEncoder.MAX_PHOTOS) break
+                val img = PhotoEncoder.encode(ctx, u)
+                if (img != null) added += img else failed++
+            }
+            photos = photos + added
+            photoNote = when {
+                failed > 0 -> "Не удалось прочитать фото: $failed."
+                uris.size > added.size -> "Можно прикрепить не больше ${PhotoEncoder.MAX_PHOTOS} фото."
+                else -> null
+            }
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PhotoEncoder.MAX_PHOTOS)) { uris ->
+        if (uris.isNotEmpty()) addUris(uris)
+    }
+    val shared by IncomingShare.uris.collectAsState()
+    LaunchedEffect(shared) {
+        if (shared.isNotEmpty()) {
+            val list = shared
+            IncomingShare.uris.value = emptyList()
+            addUris(list)
+        }
+    }
 
     val listState = rememberLazyListState()
     val extraItems = 3 // шаги, подтверждение, черновик
@@ -85,33 +143,62 @@ fun AssistantScreen() {
         if (granted) startListening() else voiceNote = "Без разрешения на микрофон голосовой ввод недоступен."
     }
 
+    LaunchedEffect(voiceRequest) {
+        if (voiceRequest > 0 && !listening) {
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening()
+            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                "Статус: ${state.status}  ·  режим: ${settings.mode.title}",
-                style = MaterialTheme.typography.labelLarge,
+            Row(
                 modifier = Modifier.weight(1f),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val busy = state.phase == Phase.RUNNING || state.phase == Phase.WAITING_CONFIRMATION
+                Box(
+                    modifier = Modifier.size(10.dp).clip(CircleShape).background(
+                        if (busy) MaterialTheme.colorScheme.secondary else RwPalette.Success,
+                    ),
+                )
+                Text(
+                    "${state.status} · ${settings.mode.title}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             if (state.phase == Phase.RUNNING || state.phase == Phase.WAITING_CONFIRMATION) {
                 OutlinedButton(onClick = { Graph.controller.stop() }) { Text("Стоп") }
             } else if (state.chat.isNotEmpty()) {
-                OutlinedButton(onClick = { Graph.controller.clearChat() }) { Text("Очистить") }
+                TextButton(onClick = { Graph.controller.clearChat() }) { Text("Очистить") }
             }
         }
 
-        if (!hasKey) {
+        if (!a11yOn) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             ) {
-                Text(
-                    "Чтобы агент заработал, введите ваш API-ключ DeepSeek: вкладка «Настройки» → «DeepSeek».",
+                Row(
                     modifier = Modifier.padding(12.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "Управление экраном выключено: агент не видит другие приложения и не может в них нажимать.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(onClick = onFixAccess) { Text("Включить") }
+                }
             }
         }
 
@@ -122,11 +209,32 @@ fun AssistantScreen() {
         ) {
             if (state.chat.isEmpty()) {
                 item {
-                    Text(
-                        "Примеры команд:\n• «Открой Gmail»\n• «Покажи последние уведомления»\n• «Найди в памяти сообщения про аренду»\n• «Подготовь ответ на испанском, но пока не отправляй»",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        BrandMark(72.dp)
+                        Text("Чем помочь?", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Напишите или скажите команду. Вот что можно попробовать:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        listOf(
+                            "Покажи последние уведомления",
+                            "Есть у меня непрочитанные сообщения?",
+                            "Найди в памяти сообщения про аренду",
+                            "Подготовь ответ на испанском, но пока не отправляй",
+                        ).forEach { example ->
+                            AssistChip(
+                                onClick = { input = example },
+                                label = { Text(example) },
+                                shape = MaterialTheme.shapes.large,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                 }
             }
             items(state.chat) { entry -> ChatBubble(entry) }
@@ -179,35 +287,82 @@ fun AssistantScreen() {
 
         voiceNote?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
 
+        if (photos.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                photos.forEachIndexed { i, p ->
+                    Box {
+                        Image(
+                            bitmap = p.thumb.asImageBitmap(),
+                            contentDescription = "Фото ${i + 1}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { photos = photos.filterIndexed { j, _ -> j != i } },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("✕", fontSize = 11.sp) }
+                    }
+                }
+                Text(
+                    "Фото будут отправлены в DeepSeek для анализа.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        photoNote?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            FilledTonalIconButton(
+                onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                modifier = Modifier.size(52.dp),
+                enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
+            ) { Text("📎", fontSize = 22.sp) }
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(26.dp),
                 placeholder = { Text(if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
                 maxLines = 4,
             )
-            FilledTonalButton(onClick = {
-                if (listening) {
-                    voice.stop()
-                    listening = false
-                } else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                    startListening()
-                } else {
-                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }) { Text(if (listening) "Слушаю…" else "Голос") }
-            Button(
-                enabled = input.isNotBlank() && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION,
+            FilledTonalIconButton(
                 onClick = {
-                    Graph.controller.submit(input)
-                    input = ""
+                    if (listening) {
+                        voice.stop()
+                        listening = false
+                    } else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        startListening()
+                    } else {
+                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 },
-            ) { Text("Отправить") }
+                modifier = Modifier.size(52.dp),
+            ) { Text(if (listening) "⏺" else "🎤", fontSize = 22.sp) }
+            FilledIconButton(
+                enabled = (input.isNotBlank() || photos.isNotEmpty()) && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION,
+                onClick = {
+                    Graph.controller.submit(input, photos)
+                    input = ""
+                    photos = emptyList()
+                    photoNote = null
+                },
+                modifier = Modifier.size(52.dp),
+            ) { Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -215,16 +370,33 @@ fun AssistantScreen() {
 @Composable
 private fun ChatBubble(entry: ChatEntry) {
     val scheme = MaterialTheme.colorScheme
-    val (bg, label) = when (entry.role) {
-        ChatRole.USER -> scheme.primaryContainer to "Вы"
-        ChatRole.AGENT -> scheme.secondaryContainer to "RW AI"
-        ChatRole.SYSTEM -> scheme.surfaceVariant to "Система"
-        ChatRole.ERROR -> scheme.errorContainer to "Ошибка"
+    val isUser = entry.role == ChatRole.USER
+    val (bg, fg, label) = when (entry.role) {
+        ChatRole.USER -> Triple(scheme.primary, scheme.onPrimary, "Вы")
+        ChatRole.AGENT -> Triple(scheme.surface, scheme.onSurface, "RW AI")
+        ChatRole.SYSTEM -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, "Система")
+        ChatRole.ERROR -> Triple(scheme.errorContainer, scheme.onErrorContainer, "Ошибка")
     }
-    Card(colors = CardDefaults.cardColors(containerColor = bg), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(entry.text)
+    val shape = if (isUser) RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp) else RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
+        Column(
+            modifier = Modifier.widthIn(max = 330.dp).clip(shape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.7f))
+            if (entry.thumbs.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                    entry.thumbs.forEach { t ->
+                        Image(
+                            bitmap = t.asImageBitmap(),
+                            contentDescription = "Фото",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(88.dp).clip(RoundedCornerShape(12.dp)),
+                        )
+                    }
+                }
+            }
+            Text(entry.text, color = fg)
         }
     }
 }
