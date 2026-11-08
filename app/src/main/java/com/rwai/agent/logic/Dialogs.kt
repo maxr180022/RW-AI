@@ -35,7 +35,10 @@ object DialogRules {
 
     /** Сколько последних реплик остаётся дословно после сжатия (2 обмена «владелец → агент»). */
     const val KEEP_LAST_TURNS = 4
-    const val SUMMARY_CAP = 1_500
+    const val SUMMARY_CAP = 1_200
+
+    /** Общая память проекта: суть всех его диалогов, как «знания проекта» в Claude. Попадает в каждый диалог этого проекта и больше никуда. */
+    const val PROJECT_MEMORY_CAP = 1_000
     const val CARRY_CAP = 1_200
 
     /** Длина строки выжимки: задача → результат (как у прежней «скользящей памяти»). */
@@ -62,11 +65,12 @@ object DialogRules {
     private fun capped(t: DialogTurn): String = t.text.take(if (t.fromOwner) TURN_CAP_OWNER else TURN_CAP_AGENT)
 
     /** Размер памяти диалога в токенах: именно столько уходит модели вместе с задачей. */
-    fun contextTokens(summary: String, turns: List<DialogTurn>, projectNote: String = ""): Int =
-        estimateTokens(summary) + estimateTokens(projectNote.take(NOTE_CAP)) + turns.sumOf { estimateTokens(capped(it)) + TURN_OVERHEAD }
+    fun contextTokens(summary: String, turns: List<DialogTurn>, projectNote: String = "", projectMemory: String = ""): Int =
+        estimateTokens(summary) + estimateTokens(projectNote.take(NOTE_CAP)) + estimateTokens(projectMemory.take(PROJECT_MEMORY_CAP)) +
+            turns.sumOf { estimateTokens(capped(it)) + TURN_OVERHEAD }
 
-    fun fillPercent(summary: String, turns: List<DialogTurn>, projectNote: String = ""): Int =
-        (contextTokens(summary, turns, projectNote) * 100L / BUDGET_TOKENS).toInt().coerceIn(0, 100)
+    fun fillPercent(summary: String, turns: List<DialogTurn>, projectNote: String = "", projectMemory: String = ""): Int =
+        (contextTokens(summary, turns, projectNote, projectMemory) * 100L / BUDGET_TOKENS).toInt().coerceIn(0, 100)
 
     fun level(percent: Int): FillLevel = when {
         percent >= FULL_PERCENT -> FillLevel.FULL
@@ -113,13 +117,17 @@ object DialogRules {
         return Compacted(fold(summary, turns.subList(0, cut)), turns.subList(cut, turns.size).toList(), cut)
     }
 
+    /** Общая память проекта после того, как в неё свернули реплики (из сжатия диалога или из закрытого диалога). */
+    fun foldProjectMemory(memory: String, turns: List<DialogTurn>): String = fold(memory, turns, PROJECT_MEMORY_CAP)
+
     /** Выжимка для нового диалога: память прошлого диалога и все его реплики, сжатые целиком. */
     fun carryOver(summary: String, turns: List<DialogTurn>): String = fold(summary, turns, CARRY_CAP)
 
     /** Текст «памяти» для модели. Пустая строка, если помнить нечего. Вызывающий оборачивает его как недоверенные данные. */
-    fun buildContext(summary: String, turns: List<DialogTurn>, projectName: String? = null, projectNote: String = ""): String {
+    fun buildContext(summary: String, turns: List<DialogTurn>, projectName: String? = null, projectNote: String = "", projectMemory: String = ""): String {
         val parts = ArrayList<String>()
         if (projectName != null) parts += "Проект «$projectName»" + (if (projectNote.isNotBlank()) ": " + projectNote.take(NOTE_CAP) else "") + ". Работай только в рамках этого проекта."
+        if (projectName != null && projectMemory.isNotBlank()) parts += "Память проекта (суть прошлых диалогов этого проекта):\n" + projectMemory.take(PROJECT_MEMORY_CAP)
         if (summary.isNotBlank()) parts += "Кратко о прошлом в этом диалоге:\n$summary"
         if (turns.isNotEmpty()) parts += "Последние реплики:\n" + turns.joinToString("\n") { (if (it.fromOwner) "Владелец: " else "Агент: ") + capped(it) }
         return parts.joinToString("\n\n")

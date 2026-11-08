@@ -241,7 +241,7 @@ fun SettingsScreen() {
                 FilterChip(selected = modelInput == m, onClick = { modelInput = m }, label = { Text(m) })
             }
         }
-        SwitchRow("Режим рассуждения (thinking)", "Точнее планирует, но отвечает медленнее и расходует больше токенов.", settings.thinking) { v ->
+        SwitchRow("Режим рассуждения (thinking)", "Точнее планирует, но каждый шаг в разы медленнее и расходует больше токенов. По умолчанию выключено: так агент быстрее ходит по телефону.", settings.thinking) { v ->
             Graph.settings.update { it.copy(thinking = v) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

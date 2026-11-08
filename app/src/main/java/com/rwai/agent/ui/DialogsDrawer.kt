@@ -164,14 +164,15 @@ fun DialogMemoryBar(title: String, project: String?, percent: Int, note: String?
     }
     Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                title + (if (project != null) "  ·  $project" else ""),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Внутри проекта это видно сразу: заметная метка с названием проекта.
+                if (project != null) {
+                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(accentBrush()).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                        Text("Проект · $project", style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
             Text("Чат заполнен на $percent %", style = MaterialTheme.typography.labelMedium, color = textColor)
         }
         Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f))) {

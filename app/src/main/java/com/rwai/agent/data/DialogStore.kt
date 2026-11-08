@@ -3,7 +3,7 @@ package com.rwai.agent.data
 import android.content.ContentValues
 import com.rwai.agent.logic.DialogRules
 
-data class ProjectRow(val id: Long, val name: String, val note: String, val created: Long)
+data class ProjectRow(val id: Long, val name: String, val note: String, val created: Long, val memory: String = "")
 
 data class DialogRow(
     val id: Long,
@@ -26,15 +26,21 @@ class DialogStore(private val helper: RwDb) {
 
     // ---------------- проекты ----------------
 
-    fun projects(): List<ProjectRow> = helper.readableDatabase.rawQuery("SELECT id, name, note, created FROM projects ORDER BY created", null).use { c ->
+    fun projects(): List<ProjectRow> = helper.readableDatabase.rawQuery("SELECT id, name, note, created, memory FROM projects ORDER BY created", null).use { c ->
         val out = ArrayList<ProjectRow>()
-        while (c.moveToNext()) out += ProjectRow(c.getLong(0), c.getString(1), c.getString(2), c.getLong(3))
+        while (c.moveToNext()) out += ProjectRow(c.getLong(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4))
         out
     }
 
     fun addProject(name: String, note: String, now: Long): Long {
         val v = ContentValues().apply { put("name", name); put("note", note); put("created", now) }
         return helper.writableDatabase.insert("projects", null, v)
+    }
+
+    /** Общая память проекта: суть его диалогов. Читается только внутри проекта. */
+    fun saveProjectMemory(id: Long, memory: String) {
+        val v = ContentValues().apply { put("memory", memory) }
+        helper.writableDatabase.update("projects", v, "id = ?", arrayOf(id.toString()))
     }
 
     // ---------------- диалоги ----------------

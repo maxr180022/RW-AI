@@ -54,7 +54,7 @@ data class AgentLoopConfig(
     val maxSteps: Int = 30,
     val maxInvalidInRow: Int = 3,
     val maxRepeats: Int = 3,
-    val historyCharBudget: Int = 60_000,
+    val historyCharBudget: Int = SpeedProfile.HISTORY_CHARS,
 )
 
 object SystemPrompt {

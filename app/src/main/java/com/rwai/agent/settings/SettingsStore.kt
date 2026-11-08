@@ -3,6 +3,7 @@ package com.rwai.agent.settings
 import android.content.Context
 import com.rwai.agent.logic.AutonomyMode
 import com.rwai.agent.logic.Endpoint
+import com.rwai.agent.logic.SpeedProfile
 import com.rwai.agent.security.SecretStore
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -13,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 data class Settings(
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = DEFAULT_MODEL,
-    val thinking: Boolean = true,
+    val thinking: Boolean = false, // по умолчанию выключено: рассуждение замедляет каждый шаг агента в разы (см. SpeedProfile)
     val mode: AutonomyMode = AutonomyMode.ASSISTANT,
     val autoSend: Boolean = false,
     /** BCP-47: ru-RU, es-UY, es-ES, en-US */
@@ -78,10 +79,14 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
 
     private fun load(): Settings {
         val d = Settings()
+        // Профиль скорости (0.5.9): один раз выключаем рассуждение на уже настроенных телефонах; включить обратно можно в «Настройки».
+        if (!prefs.getBoolean("speed_profile_1", false)) {
+            prefs.edit().putBoolean("thinking", SpeedProfile.thinkingAfterMigration(false, true)).putBoolean("speed_profile_1", true).apply()
+        }
         return Settings(
             baseUrl = Endpoint.normalize(prefs.getString("baseUrl", d.baseUrl) ?: d.baseUrl) ?: d.baseUrl,
             model = prefs.getString("model", d.model)?.takeIf { it.isNotBlank() } ?: d.model,
-            thinking = prefs.getBoolean("thinking", d.thinking),
+            thinking = SpeedProfile.thinkingAfterMigration(prefs.getBoolean("speed_profile_1", false), prefs.getBoolean("thinking", d.thinking)),
             mode = AutonomyMode.fromName(prefs.getString("mode", d.mode.name)),
             autoSend = prefs.getBoolean("autoSend", d.autoSend),
             language = prefs.getString("language", d.language) ?: d.language,

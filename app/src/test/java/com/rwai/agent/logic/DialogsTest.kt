@@ -131,7 +131,7 @@ class DialogsTest {
         // Защита обрезает вставленный блок на 6000 знаках с конца: память после сжатия обязана помещаться, иначе пропадут самые свежие реплики.
         val huge = (0 until 200).map { DialogTurn(it % 2 == 0, "я".repeat(5_000), it.toLong()) }
         val c = DialogRules.compact("", huge)
-        val ctx = DialogRules.buildContext(c.summary, c.turns, "П".repeat(40), "н".repeat(5_000))
+        val ctx = DialogRules.buildContext(c.summary, c.turns, "П".repeat(40), "н".repeat(5_000), "м".repeat(5_000))
         assertTrue("длина=${ctx.length}", ctx.length <= 5_800)
         val wrapped = UntrustedContent.wrap("history", ctx)
         assertFalse(wrapped.contains("обрезано"))
@@ -165,6 +165,26 @@ class DialogsTest {
         val projectB = DialogRules.carryOver("• дело проекта Б → ок", emptyList())
         assertFalse(projectB.contains("секрет проекта А"))
         assertFalse(projectA.contains("дело проекта Б"))
+    }
+
+    @Test fun projectMemoryIsSharedByAllDialogsOfTheProjectAndNeverLeavesIt() {
+        val inProject = DialogRules.buildContext("", emptyList(), "Квартира", "", "• договор аренды → проверен")
+        assertTrue(inProject.contains("Память проекта (суть прошлых диалогов этого проекта):\n• договор аренды → проверен"))
+        // вне проекта (projectName == null) память проекта в запрос не попадает, даже если её передали по ошибке
+        val outside = DialogRules.buildContext("", emptyList(), null, "", "• договор аренды → проверен")
+        assertFalse(outside.contains("договор аренды"))
+        assertEquals("", outside)
+    }
+
+    @Test fun projectMemoryCountsTowardFillAndStaysWithinItsCap() {
+        val without = DialogRules.contextTokens("", turns(4))
+        val with = DialogRules.contextTokens("", turns(4), projectMemory = "м".repeat(5_000))
+        assertTrue(with > without)
+        assertTrue((with - without) <= DialogRules.estimateTokens("м".repeat(DialogRules.PROJECT_MEMORY_CAP)))
+        var mem = ""
+        repeat(50) { i -> mem = DialogRules.foldProjectMemory(mem, listOf(DialogTurn(true, "задача $i " + "я".repeat(80), 0), DialogTurn(false, "итог $i " + "ы".repeat(200), 0))) }
+        assertTrue(mem.length <= DialogRules.PROJECT_MEMORY_CAP)
+        assertTrue(mem.contains("задача 49"))
     }
 
     @Test fun projectNameValidation() {

@@ -147,6 +147,21 @@ class AgentController(
         return store.dialog(id)!!
     }
 
+    /**
+     * Диалог проекта закрывается (новый день или новый диалог): его живые реплики сворачиваются в общую память проекта,
+     * чтобы любой следующий диалог ЭТОГО проекта помнил суть, а диалоги других проектов и вне проектов — нет.
+     */
+    private fun foldIntoProject(d: DialogRow) {
+        if (d.projectId <= 0) return
+        val p = store.projects().firstOrNull { it.id == d.projectId } ?: return
+        val from = store.ctxFrom(d.id)
+        val msgs = store.messages(d.id)
+        val turns = msgs.filter { it.id > from && (it.role == "USER" || it.role == "AGENT") }.map { DialogTurn(it.role == "USER", it.text, it.ts) }
+        if (turns.isEmpty()) return
+        store.saveProjectMemory(p.id, DialogRules.foldProjectMemory(p.memory, turns))
+        store.saveMemory(d.id, d.summary, msgs.last().id, d.compactions) // реплики свёрнуты: второй раз в память проекта не попадут
+    }
+
     /** Сжатая память диалога для переноса в следующий: его выжимка плюс живые реплики. */
     private fun carryFrom(d: DialogRow): String {
         val from = store.ctxFrom(d.id)
@@ -194,7 +209,7 @@ class AgentController(
 
     private fun refreshMemoryState() {
         synchronized(memLock) {
-            val pct = DialogRules.fillPercent(memSummary, memTurns, activeProject?.note.orEmpty())
+            val pct = DialogRules.fillPercent(memSummary, memTurns, activeProject?.note.orEmpty(), activeProject?.memory.orEmpty())
             _state.update {
                 it.copy(dialogId = activeId, dialogTitle = activeTitle, projectName = activeProject?.name, fillPercent = pct, compactions = memCompactions, carriedFrom = activeCarried)
             }
@@ -212,7 +227,7 @@ class AgentController(
 
     /** Что уходит модели вместе с новой задачей: память диалога (и заметка проекта). Вызывающий оборачивает её как недоверенные данные. */
     private fun memoryText(): String = synchronized(memLock) {
-        DialogRules.buildContext(memSummary, memTurns, activeProject?.name, activeProject?.note.orEmpty())
+        DialogRules.buildContext(memSummary, memTurns, activeProject?.name, activeProject?.note.orEmpty(), activeProject?.memory.orEmpty())
     }
 
     /** Сохранить сообщение в диалоге и учесть его в памяти (служебные сообщения и ошибки в память не идут). */
@@ -240,11 +255,16 @@ class AgentController(
         try {
             synchronized(memLock) {
                 if (activeId == 0L) return
-                val pct = DialogRules.fillPercent(memSummary, memTurns, activeProject?.note.orEmpty())
+                val pct = DialogRules.fillPercent(memSummary, memTurns, activeProject?.note.orEmpty(), activeProject?.memory.orEmpty())
                 if (!DialogRules.needsCompaction(pct)) return
                 val c = DialogRules.compact(memSummary, memTurns)
                 if (c.folded == 0) return
                 val lastFoldedId = memIds[c.folded - 1]
+                activeProject?.let { p ->
+                    val mem = DialogRules.foldProjectMemory(p.memory, memTurns.subList(0, c.folded).toList())
+                    store.saveProjectMemory(p.id, mem)
+                    activeProject = p.copy(memory = mem)
+                }
                 memSummary = c.summary
                 memTurns = ArrayList(c.turns)
                 memIds = ArrayList(memIds.drop(c.folded))
@@ -272,11 +292,12 @@ class AgentController(
                 activate(store.dialog(id) ?: return)
                 return
             }
-            val carry = carryFrom(cur)
+            foldIntoProject(cur)
+            val carry = if (cur.projectId > 0) "" else carryFrom(cur) // в проекте память общая, у диалога вне проекта — выжимка прошлого
             val d = newDialogRow(cur.projectId, carry, cur.title)
             pendingQuestion = null
             activate(d)
-            addChat(ChatRole.SYSTEM, "Новый день — новый диалог." + if (carry.isNotBlank()) " Суть прошлого сохранена в сжатом виде." else "")
+            addChat(ChatRole.SYSTEM, "Новый день — новый диалог." + if (cur.projectId > 0) " Память проекта сохранена." else if (carry.isNotBlank()) " Суть прошлого сохранена в сжатом виде." else "")
         } catch (_: Exception) { }
     }
 
@@ -304,7 +325,8 @@ class AgentController(
             if (prev != null && store.messages(prev.id).isEmpty()) {
                 activate(prev) // пустой диалог не плодим: открываем уже существующий
             } else {
-                activate(newDialogRow(pid, prev?.let { carryFrom(it) }.orEmpty(), prev?.title.orEmpty()))
+                prev?.let { foldIntoProject(it) }
+                activate(newDialogRow(pid, if (pid > 0) "" else prev?.let { carryFrom(it) }.orEmpty(), prev?.title.orEmpty()))
             }
             true
         } catch (_: Exception) { false }

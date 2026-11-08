@@ -210,7 +210,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
             title = state.dialogTitle,
             project = state.projectName,
             percent = state.fillPercent,
-            note = state.carriedFrom.takeIf { it.isNotBlank() && state.chat.isEmpty() }?.let { "Память диалога $it передана сюда в сжатом виде." },
+            note = state.carriedFrom.takeIf { it.isNotBlank() && state.chat.isEmpty() }?.let { if (state.projectName != null) "Память проекта «${state.projectName}» уже здесь." else "Память диалога $it передана сюда в сжатом виде." },
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -288,6 +288,13 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                             LogoMark(150.dp)
                         }
                         Text("Чем помочь?", style = MaterialTheme.typography.headlineMedium.copy(brush = brandBrush()))
+                        state.projectName?.let { name ->
+                            Text(
+                                "Проект «$name»: диалоги и память проекта живут только внутри него и никуда не уходят.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
                             "Напишите или скажите команду. Вот что можно попробовать:",
                             style = MaterialTheme.typography.bodyMedium,
