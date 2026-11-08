@@ -80,6 +80,17 @@ class PendingRepliesTest {
         assertFalse(m.containsKey("c0"))
     }
 
+    @Test fun previewShowsWhatTheyWroteLast() {
+        val p = PendingReplies.pending(threads(), emptyMap(), 0L)
+        assertEquals("Ты тут?", p.first { it.contact == "taisiialook" }.preview) // последнее сообщение, а не первое
+        assertEquals("Позвони пожалуйста", p.first { it.contact == "Ира" }.preview)
+        val long = MessageTriage.analyze(listOf(msg("слово \n\n  ".repeat(100), "Петя", at(10, 0)))).threads
+        val pv = PendingReplies.pending(long, emptyMap(), 0L).first().preview
+        assertTrue(pv.length <= PendingReplies.PREVIEW_CHARS)
+        assertFalse(pv.contains("\n"))
+        assertEquals("", PendingReplies.preview(null))
+    }
+
     @Test fun lineAndTitleAreReadable() {
         val p = PendingReplies.pending(threads(), emptyMap(), 0L).first { it.contact == "taisiialook" }
         assertEquals("taisiialook · Instagram · 08.11 01:17", PendingReplies.line(p, uy))

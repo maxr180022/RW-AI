@@ -6,7 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,27 +49,40 @@ fun PendingStrip(items: List<PendingReply>, onOpen: () -> Unit) {
         }
     }
     val current = items[index.coerceIn(0, items.lastIndex)]
-    val shape = RoundedCornerShape(50)
-    Row(
+    val shape = RoundedCornerShape(16.dp)
+    Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(shape).border(1.dp, glowBorder(), shape)
-            .background(Color.White.copy(alpha = 0.04f)).clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .background(Color.White.copy(alpha = 0.04f)).clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(RwPalette.Danger))
-        Text(PendingReplies.title(items.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-        Crossfade(targetState = current, modifier = Modifier.weight(1f), label = "pending") { p ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (p.isNew) Text("новое", style = MaterialTheme.typography.labelSmall, color = RwPalette.Blue, maxLines = 1)
-                Text(
-                    PendingReplies.line(p),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(RwPalette.Danger))
+            Text(PendingReplies.title(items.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // Вторая и третья строки: кто, где, когда и что написал. Меняется по очереди; высота не прыгает.
+        Crossfade(targetState = current, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), label = "pending") { p ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (p.isNew) Text("новое", style = MaterialTheme.typography.labelSmall, color = RwPalette.Blue, maxLines = 1)
+                    Text(
+                        PendingReplies.line(p),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (p.preview.isNotBlank()) {
+                    Text(
+                        p.preview,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
-        Text("›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

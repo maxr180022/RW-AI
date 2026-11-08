@@ -6,7 +6,11 @@ import java.util.Locale
 import java.util.TimeZone
 
 /** Переписка, где после последнего ответа владельца пришло что-то новое. isNew — пришло после того, как владелец в последний раз смотрел «Входящие». */
-data class PendingReply(val app: String, val contact: String, val lastTs: Long, val count: Int, val urgent: Boolean, val isNew: Boolean)
+data class PendingReply(
+    val app: String, val contact: String, val lastTs: Long, val count: Int, val urgent: Boolean, val isNew: Boolean,
+    /** Что человек написал последним: чтобы в строке было видно, о чём речь. */
+    val preview: String = "",
+)
 
 /**
  * «Кому я не ответил»: строка на главном экране. Считается только по уведомлениям на телефоне (без модели, бесплатно).
@@ -19,14 +23,19 @@ object PendingReplies {
 
     fun key(contact: String): String = contact.trim().lowercase()
 
+    const val PREVIEW_CHARS = 160
+
+    /** Текст сообщения в одну строку, не длиннее [PREVIEW_CHARS]. */
+    fun preview(body: String?): String = (body ?: "").replace(Regex("\\s+"), " ").trim().take(PREVIEW_CHARS)
+
     /** Неотвеченные и новые сверху; внутри — срочные, затем по времени (свежие выше). */
     fun pending(threads: List<MessageTriage.Thread>, repliedAt: Map<String, Long>, seenAt: Long): List<PendingReply> =
         threads.mapNotNull { t ->
             val replied = repliedAt[key(t.contact)] ?: 0L
             val fresh = t.messages.filter { it.ts > replied }
             if (fresh.isEmpty()) null else {
-                val last = fresh.maxOf { it.ts }
-                PendingReply(t.app, t.contact, last, fresh.size, t.urgent, last > seenAt)
+                val latest = fresh.maxByOrNull { it.ts }!!
+                PendingReply(t.app, t.contact, latest.ts, fresh.size, t.urgent, latest.ts > seenAt, preview(latest.body))
             }
         }.sortedWith(compareByDescending<PendingReply> { it.isNew }.thenByDescending { it.urgent }.thenByDescending { it.lastTs })
 
