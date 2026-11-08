@@ -17,6 +17,7 @@ object Mentions {
         MentionCmd("музыка", listOf("music", "плеер", "трек"), "Музыка", "Используй media_status, media_control и play_music, без открытия приложений, если плеер уже играет."),
         MentionCmd("календарь", listOf("calendar", "события"), "Календарь", "Используй calendar_events и calendar_add."),
         MentionCmd("телефон", listOf("phone", "батарея", "заряд"), "Телефон", "Используй phone_status; не открывай приложения."),
+        MentionCmd("погода", listOf("weather", "прогноз"), "Погода", "Используй weather; без города — по геолокации телефона."),
         MentionCmd("интернет", listOf("web", "поиск", "найди"), "Интернет", "Используй web_search и fetch_page; экран телефона не трогай."),
         MentionCmd("входящие", listOf("inbox", "сообщения", "уведомления"), "Входящие", "Начни с read_notifications и search_memory; приложения открывай, только если данных не хватает."),
         MentionCmd("телеграм", listOf("telegram", "tg"), "Telegram", "Работай через приложение Telegram: открой его, найди чат, читай с экрана; ответы только через show_draft."),

@@ -59,6 +59,7 @@ class AndroidToolExecutor(
         "youtube_search" -> youtubeSearch(call.str("query").orEmpty())
         "calendar_events" -> calendarEvents(call.int("days") ?: 3)
         "calendar_add" -> calendarAdd(call)
+        "weather" -> weather(call.str("city").orEmpty())
         "make_pdf" -> makePdf(call.str("file_name"), call.str("content").orEmpty())
         "draw_image" -> drawImage(call.str("file_name"), call.str("commands").orEmpty())
         "annotate_document" -> annotateDocument(call.str("source"), call.str("commands").orEmpty())
@@ -198,6 +199,28 @@ class AndroidToolExecutor(
     /** Запрос не должен нести личные данные владельца: проверяем по профилю и по ключам. */
     private fun leaksPrivateData(text: String): Boolean =
         com.rwai.agent.logic.ProfileTemplates.redact(text, com.rwai.agent.Graph.profile.values()) != text
+
+    private suspend fun weather(city: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            if (city.isNotBlank()) {
+                if (leaksPrivateData(city)) return@withContext ToolResult.failed("В названии города есть личные данные владельца.")
+                val g = com.rwai.agent.connectors.WeatherClient.geocode(city.trim())
+                    ?: return@withContext ToolResult.failed("Город «${city.take(40)}» не найден. Уточните название.")
+                return@withContext ToolResult.ok(com.rwai.agent.connectors.WeatherClient.forecast(g.name, g.lat, g.lon), untrusted = true)
+            }
+            if (!com.rwai.agent.connectors.LocationFinder.hasPermission(context)) {
+                return@withContext ToolResult.unavailable("Нет доступа к геолокации. Включите: Ещё → Подключения → Погода. Или назовите город.")
+            }
+            val loc = com.rwai.agent.connectors.LocationFinder.find(context)
+                ?: return@withContext ToolResult.failed("Не удалось определить местоположение (включите геолокацию в шторке телефона) — назовите город.")
+            val name = com.rwai.agent.connectors.LocationFinder.placeName(context, loc) ?: "По вашей геолокации"
+            ToolResult.ok(com.rwai.agent.connectors.WeatherClient.forecast(name, loc.latitude, loc.longitude), untrusted = true)
+        } catch (e: java.io.IOException) {
+            ToolResult.failed((e.message ?: "Нет связи с сервисом погоды.").take(160))
+        } catch (e: Exception) {
+            ToolResult.failed("Не удалось получить погоду: " + e.javaClass.simpleName)
+        }
+    }
 
     // --------------------------------------------------------------------------------------------- документы
 

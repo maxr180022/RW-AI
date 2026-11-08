@@ -177,3 +177,36 @@ class MentionsTest {
         assertTrue(Mentions.suggestions("@").size >= 8)
     }
 }
+
+class WeatherTest {
+    private val sample = """{"current":{"time":"2026-11-08T09:00","temperature_2m":18.4,"apparent_temperature":17.1,"relative_humidity_2m":62,"precipitation":0.0,"weather_code":2,"wind_speed_10m":4.2,"wind_direction_10m":225},
+"daily":{"time":["2026-11-08","2026-11-09","2026-11-10"],"weather_code":[2,61,0],"temperature_2m_max":[21.3,19.0,-1.2],"temperature_2m_min":[12.0,11.5,-6.0],"precipitation_probability_max":[10,70,0]}}"""
+
+    @Test fun formatsForecast() {
+        val t = WeatherFormat.format("Монтевидео", sample)
+        val lines = t.lines()
+        assertEquals("Монтевидео: сейчас +18° (ощущается +17°), переменная облачность, ветер 4 м/с юго-западный, влажность 62%", lines[0])
+        assertEquals("Сегодня (11-08): +12°…+21°, переменная облачность", lines[1])
+        assertEquals("Завтра (11-09): +12°…+19°, небольшой дождь, осадки 70%", lines[2])
+        assertEquals("Послезавтра (11-10): -6°…-1°, ясно", lines[3])
+    }
+
+    @Test fun garbageGivesEmpty() {
+        assertEquals("", WeatherFormat.format("X", "не json"))
+        assertEquals("", WeatherFormat.format("X", "{}"))
+    }
+
+    @Test fun parsesGeocode() {
+        val g = WeatherFormat.parseGeocode("""{"results":[{"name":"Montevideo","latitude":-34.9,"longitude":-56.19,"country":"Uruguay"}]}""")!!
+        assertEquals("Montevideo, Uruguay", g.name)
+        assertEquals(-34.9, g.lat, 0.001)
+        assertEquals(null, WeatherFormat.parseGeocode("""{"results":[]}"""))
+        assertEquals(null, WeatherFormat.parseGeocode("""{}"""))
+    }
+
+    @Test fun windAndCodes() {
+        assertEquals("северный", WeatherFormat.windDir(350.0))
+        assertEquals("южный", WeatherFormat.windDir(180.0))
+        assertEquals("гроза", WeatherFormat.describe(95))
+    }
+}

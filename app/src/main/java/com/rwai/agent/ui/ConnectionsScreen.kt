@@ -86,6 +86,10 @@ fun ConnectionsScreen(resumeTick: Int) {
     val a11y = remember(resumeTick) { isAccessibilityEnabled(ctx) }
     var calRead by remember(resumeTick) { mutableStateOf(CalendarClient.canRead(ctx)) }
     var calWrite by remember(resumeTick) { mutableStateOf(CalendarClient.canWrite(ctx)) }
+    var locOk by remember(resumeTick) { mutableStateOf(com.rwai.agent.connectors.LocationFinder.hasPermission(ctx)) }
+    val locLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        locOk = com.rwai.agent.connectors.LocationFinder.hasPermission(ctx)
+    }
     val calLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         calRead = CalendarClient.canRead(ctx); calWrite = CalendarClient.canWrite(ctx)
     }
@@ -186,6 +190,15 @@ fun ConnectionsScreen(resumeTick: Int) {
             if (!(calRead && calWrite)) {
                 Button(onClick = { calLauncher.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }) { Text("Разрешить доступ к календарю") }
             }
+        }
+
+        // ---- Погода ----
+        ConnCard("Погода", locOk) {
+            Text(
+                "Спросите «какая погода?» — Руся определит город по примерной геолокации телефона и ответит без открытия приложений. Наружу уходят только координаты, округлённые до ~1 км, и только к бесплатному сервису Open-Meteo; модели DeepSeek они не передаются. Можно и без разрешения: «погода в Перми».",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!locOk) Button(onClick = { locLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }) { Text("Разрешить примерную геолокацию") }
         }
 
         // ---- WhatsApp / Telegram ----
