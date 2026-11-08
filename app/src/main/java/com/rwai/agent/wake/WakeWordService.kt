@@ -213,7 +213,7 @@ class WakeWordService : Service() {
                         audio = createAudio()
                         WakeState.holdingMic = true
                         lastTick = SystemClock.elapsedRealtime()
-                        setStatus("Слушаю «Окей, ${s.wakeName.replaceFirstChar { it.uppercase() }}»")
+                        setStatus("Слушаю «${s.wakeName.replaceFirstChar { it.uppercase() }}», «Окей, …», «Привет, …»")
                     } catch (e: Throwable) {
                         release()
                         setStatus("Не удалось включить микрофон или модель")

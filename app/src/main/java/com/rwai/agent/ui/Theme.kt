@@ -21,15 +21,18 @@ import androidx.compose.ui.unit.sp
  */
 object RwPalette {
     // Градиент фирменной шапки и логотипа
-    val GradientStart = Color(0xFF1B6EF3)
-    val GradientEnd = Color(0xFF7B5CFA)
+    val GradientStart = Color(0xFF2B6BFF)
+    val GradientEnd = Color(0xFFFF2D87)
+    val Blue = Color(0xFF2B6BFF)
+    val Violet = Color(0xFF8A4DFF)
+    val Pink = Color(0xFFFF2D87)
 
     // Тёмная тема
-    val DarkBackground = Color(0xFF0B1220)
-    val DarkSurface = Color(0xFF121B2E)
-    val DarkSurfaceHigh = Color(0xFF1A2540)
-    val DarkPrimary = Color(0xFF6AB0FF)
-    val DarkOnPrimary = Color(0xFF04111F)
+    val DarkBackground = Color(0xFF060914)
+    val DarkSurface = Color(0xFF0E1426)
+    val DarkSurfaceHigh = Color(0xFF151D36)
+    val DarkPrimary = Color(0xFF6C9BFF)
+    val DarkOnPrimary = Color(0xFF05102A)
     val DarkAccent = Color(0xFFFFC857)
     val DarkText = Color(0xFFE8EEFB)
     val DarkTextMuted = Color(0xFF9AA8C4)
@@ -51,7 +54,7 @@ object RwPalette {
 private val DarkScheme = darkColorScheme(
     primary = RwPalette.DarkPrimary,
     onPrimary = RwPalette.DarkOnPrimary,
-    primaryContainer = Color(0xFF1E3A6E),
+    primaryContainer = Color(0xFF1B2D63),
     onPrimaryContainer = RwPalette.DarkText,
     secondary = RwPalette.DarkAccent,
     onSecondary = Color(0xFF2A1D00),
@@ -69,8 +72,8 @@ private val DarkScheme = darkColorScheme(
     surfaceContainer = RwPalette.DarkSurface,
     surfaceContainerHigh = RwPalette.DarkSurfaceHigh,
     surfaceContainerHighest = RwPalette.DarkSurfaceHigh,
-    outline = Color(0xFF3A4768),
-    outlineVariant = Color(0xFF26324F),
+    outline = Color(0xFF39466E),
+    outlineVariant = Color(0xFF222C4B),
     error = RwPalette.Danger,
     errorContainer = Color(0xFF4A1F27),
     onErrorContainer = Color(0xFFFFDAD9),
@@ -105,27 +108,33 @@ private val LightScheme = lightColorScheme(
 )
 
 private val RwShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(26.dp),
+    extraLarge = RoundedCornerShape(34.dp),
 )
 
 private val RwTypography = Typography(
-    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
-    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 23.sp),
-    bodyMedium = TextStyle(fontSize = 15.sp, lineHeight = 21.sp),
-    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
+    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
+    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
     labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
-    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp),
+    labelSmall = TextStyle(fontSize = 10.sp, lineHeight = 13.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp),
 )
 
-fun brandBrush(): Brush = Brush.linearGradient(listOf(RwPalette.GradientStart, RwPalette.GradientEnd))
+fun brandBrush(): Brush = Brush.linearGradient(listOf(RwPalette.Blue, RwPalette.Violet, RwPalette.Pink))
+
+/** Градиент пузыря пользователя и активных элементов: сине‑фиолетовый. */
+fun accentBrush(): Brush = Brush.linearGradient(listOf(RwPalette.Blue, RwPalette.Violet))
+
+/** Тонкая светящаяся рамка «стекла». */
+fun glowBorder(): Brush = Brush.linearGradient(listOf(RwPalette.Blue.copy(alpha = 0.55f), RwPalette.Violet.copy(alpha = 0.25f), RwPalette.Pink.copy(alpha = 0.45f)))
 
 @Composable
 fun RwTheme(content: @Composable () -> Unit) {

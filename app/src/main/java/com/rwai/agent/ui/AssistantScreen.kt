@@ -14,6 +14,16 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.rwai.agent.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,7 +42,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
+
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TextButton
@@ -251,7 +261,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         BrandMark(72.dp)
-                        Text("Чем помочь?", style = MaterialTheme.typography.titleLarge)
+                        Text("Чем помочь?", style = MaterialTheme.typography.headlineMedium.copy(brush = brandBrush()))
                         Text(
                             "Напишите или скажите команду. Вот что можно попробовать:",
                             style = MaterialTheme.typography.bodyMedium,
@@ -261,14 +271,15 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                             "Покажи последние уведомления",
                             "Есть у меня непрочитанные сообщения?",
                             "Найди в памяти сообщения про аренду",
-                            "Подготовь ответ на испанском, но пока не отправляй",
+                            "Составь заявление в суд в PDF",
                         ).forEach { example ->
-                            AssistChip(
-                                onClick = { input = example },
-                                label = { Text(example) },
-                                shape = MaterialTheme.shapes.large,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .border(1.dp, glowBorder(), RoundedCornerShape(16.dp))
+                                    .clickable { input = example }
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                            ) { Text(example, style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
                 }
@@ -277,7 +288,10 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
 
             item {
                 if (state.phase == Phase.RUNNING) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().border(1.dp, glowBorder(), MaterialTheme.shapes.medium),
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                    ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(state.status, style = MaterialTheme.typography.titleSmall)
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
@@ -358,55 +372,74 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
         }
         photoNote?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
+        val canSend = (input.isNotBlank() || photos.isNotEmpty()) && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 8.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(Color(0xFF0E1426).copy(alpha = 0.92f))
+                .border(1.dp, glowBorder(), RoundedCornerShape(26.dp))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        ) {
+            TextField(
                 value = input,
                 onValueChange = { input = it },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
-                shape = RoundedCornerShape(26.dp),
-                placeholder = { Text(if (listening) "Слушаю… говорите" else if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        if (listening) "Слушаю… говорите" else if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда Русе…",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                textStyle = MaterialTheme.typography.bodyLarge,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                ),
                 maxLines = 5,
             )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilledTonalIconButton(
-                onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                modifier = Modifier.size(44.dp),
-                enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
-            ) { Text("📎", fontSize = 18.sp) }
-            FilledTonalIconButton(
-                onClick = { takePhoto() },
-                modifier = Modifier.size(44.dp),
-                enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
-            ) { Text("📷", fontSize = 18.sp) }
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            val pulse by animateFloatAsState(if (listening) 1f + level * 0.9f else 1f, label = "micPulse")
-            val breath by rememberInfiniteTransition(label = "micBreath").animateFloat(
-                initialValue = 1f,
-                targetValue = 1.18f,
-                animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
-                label = "micBreathValue",
-            )
-            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                if (listening) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .graphicsLayer {
-                                val sc = pulse * breath
-                                scaleX = sc
-                                scaleY = sc
-                                alpha = 0.35f
-                            }
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.error),
-                    )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 2.dp, end = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ComposerIcon(R.drawable.ic_attach, "Прикрепить фото", enabled = photos.size < PhotoEncoder.MAX_PHOTOS) {
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
-                FilledTonalIconButton(
-                    onClick = {
+                ComposerIcon(R.drawable.ic_camera, "Сфотографировать", enabled = photos.size < PhotoEncoder.MAX_PHOTOS) { takePhoto() }
+                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                val pulse by animateFloatAsState(if (listening) 1f + level * 0.9f else 1f, label = "micPulse")
+                val breath by rememberInfiniteTransition(label = "micBreath").animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.18f,
+                    animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+                    label = "micBreathValue",
+                )
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    if (listening) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .graphicsLayer {
+                                    val sc = pulse * breath
+                                    scaleX = sc
+                                    scaleY = sc
+                                    alpha = 0.35f
+                                }
+                                .clip(CircleShape)
+                                .background(RwPalette.Pink),
+                        )
+                    }
+                    ComposerIcon(
+                        if (listening) R.drawable.ic_stop else R.drawable.ic_mic,
+                        if (listening) "Остановить запись" else "Голос",
+                        filled = listening,
+                    ) {
                         if (listening) {
                             voice.stop()
                             listening = false
@@ -416,45 +449,87 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                         } else {
                             micPermission.launch(Manifest.permission.RECORD_AUDIO)
                         }
-                    },
-                    modifier = Modifier.size(44.dp),
-                    colors = if (listening) IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
-                    else IconButtonDefaults.filledTonalIconButtonColors(),
-                ) { Text(if (listening) "⏹" else "🎤", fontSize = 18.sp) }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .then(if (canSend) Modifier.background(brandBrush()) else Modifier.background(Color.White.copy(alpha = 0.08f)))
+                        .clickable(enabled = canSend) {
+                            Graph.controller.submit(input, photos)
+                            input = ""
+                            voiceNote = null
+                            photos = emptyList()
+                            photoNote = null
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_send),
+                        contentDescription = "Отправить",
+                        colorFilter = ColorFilter.tint(if (canSend) Color.White else Color.White.copy(alpha = 0.35f)),
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
             }
-            FilledIconButton(
-                enabled = (input.isNotBlank() || photos.isNotEmpty()) && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION,
-                onClick = {
-                    Graph.controller.submit(input, photos)
-                    input = ""
-                    voiceNote = null
-                    photos = emptyList()
-                    photoNote = null
-                },
-                modifier = Modifier.size(44.dp),
-            ) { Text("↑", fontSize = 20.sp, fontWeight = FontWeight.Bold) }
         }
-        }
+    }
+}
+
+/** Круглая кнопка 40 dp с иконкой: «стеклянная» или залитая градиентом (запись). */
+@Composable
+private fun ComposerIcon(icon: Int, desc: String, enabled: Boolean = true, filled: Boolean = false, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (filled) Brush.linearGradient(listOf(RwPalette.Pink, RwPalette.Violet)) else Brush.linearGradient(listOf(Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.07f))))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(icon),
+            contentDescription = desc,
+            colorFilter = ColorFilter.tint(Color.White.copy(alpha = if (enabled) 0.95f else 0.3f)),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
 @Composable
 private fun ChatBubble(entry: ChatEntry) {
     val scheme = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
     val isUser = entry.role == ChatRole.USER
-    val (bg, fg, label) = when (entry.role) {
-        ChatRole.USER -> Triple(scheme.primary, scheme.onPrimary, "Вы")
-        ChatRole.AGENT -> Triple(scheme.surface, scheme.onSurface, "Руся AI")
-        ChatRole.SYSTEM -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, "Система")
-        ChatRole.ERROR -> Triple(scheme.errorContainer, scheme.onErrorContainer, "Ошибка")
+    val label = when (entry.role) {
+        ChatRole.USER -> null
+        ChatRole.AGENT -> "Руся AI"
+        ChatRole.SYSTEM -> "Система"
+        ChatRole.ERROR -> "Ошибка"
+    }
+    val fg = when (entry.role) {
+        ChatRole.ERROR -> Color(0xFFFFB4C8)
+        ChatRole.SYSTEM -> scheme.onSurfaceVariant
+        else -> Color.White
     }
     val shape = if (isUser) RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp) else RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp)
+    val base = when {
+        isUser -> Modifier.clip(shape).background(accentBrush())
+        entry.role == ChatRole.ERROR -> Modifier.clip(shape).background(Color(0x33FF2D55)).border(1.dp, Color(0x66FF2D55), shape)
+        else -> Modifier.clip(shape).background(Color.White.copy(alpha = 0.055f)).border(1.dp, glowBorder(), shape)
+    }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
         Column(
-            modifier = Modifier.widthIn(max = 330.dp).clip(shape).background(bg).padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.widthIn(max = 340.dp).then(base).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.7f))
+            if (label != null) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall.copy(brush = if (entry.role == ChatRole.AGENT) brandBrush() else Brush.linearGradient(listOf(fg.copy(alpha = 0.7f), fg.copy(alpha = 0.7f)))),
+                )
+            }
             if (entry.thumbs.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                     entry.thumbs.forEach { t ->
@@ -467,7 +542,33 @@ private fun ChatBubble(entry: ChatEntry) {
                     }
                 }
             }
-            Text(entry.text, color = fg)
+            Text(entry.text, color = fg, style = MaterialTheme.typography.bodyMedium)
+            entry.files.forEach { f -> FileCard(f, ctx) }
+        }
+    }
+}
+
+/** Карточка созданного файла (PDF, картинка): открыть, поделиться, сохранить в «Загрузки». */
+@Composable
+private fun FileCard(f: com.rwai.agent.docs.GeneratedFile, ctx: android.content.Context) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier = Modifier.padding(top = 6.dp).fillMaxWidth().clip(shape)
+            .background(Color.White.copy(alpha = 0.06f)).border(1.dp, glowBorder(), shape).padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text((if (f.mime.startsWith("image/")) "🖼 " else "📄 ") + f.name, style = MaterialTheme.typography.titleSmall, color = Color.White)
+        if (f.savedTo != null) Text("Сохранено: ${f.savedTo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = { com.rwai.agent.docs.DocFiles.open(ctx, f) }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) {
+                Text("Открыть", style = MaterialTheme.typography.labelMedium)
+            }
+            FilledTonalButton(onClick = { com.rwai.agent.docs.DocFiles.share(ctx, f) }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) {
+                Text("Поделиться", style = MaterialTheme.typography.labelMedium)
+            }
+            FilledTonalButton(onClick = { com.rwai.agent.docs.DocFiles.saveToDownloads(ctx, f) }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) {
+                Text("Скачать", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }

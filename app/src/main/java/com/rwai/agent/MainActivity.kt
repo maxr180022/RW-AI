@@ -51,7 +51,8 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_VOICE, false) || intent.action == Intent.ACTION_ASSIST) {
             voiceTick.intValue++
         }
-        if (intent.type?.startsWith("image/") == true) {
+        if (intent.type?.startsWith("image/") == true || intent.type == "application/pdf") {
+            val isImage = intent.type?.startsWith("image/") == true
             val uris: List<Uri> = when (intent.action) {
                 Intent.ACTION_SEND -> listOfNotNull(
                     if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -62,8 +63,32 @@ class MainActivity : ComponentActivity() {
                     else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)).orEmpty()
                 else -> emptyList()
             }
-            if (uris.isNotEmpty()) IncomingShare.uris.value = uris
+            if (uris.isNotEmpty()) {
+                if (isImage) IncomingShare.uris.value = uris
+                stashIncoming(uris, intent.type ?: "application/octet-stream")
+            }
         }
+    }
+
+    /** Копирует присланные файлы в папку приложения, чтобы их можно было размечать (annotate_document). */
+    private fun stashIncoming(uris: List<Uri>, mime: String) {
+        val app = applicationContext
+        Thread {
+            for (u in uris.take(4)) {
+                try {
+                    var name: String? = null
+                    app.contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                        if (c.moveToFirst()) name = c.getString(0)
+                    }
+                    val ext = if (mime == "application/pdf") "pdf" else if (mime.contains("png")) "png" else "jpg"
+                    val safe = com.rwai.agent.logic.DocMarkup.fileName("Получено_" + (name ?: "файл").substringBeforeLast('.'), ext, "Получено")
+                    val out = com.rwai.agent.docs.DocFiles.uniqueFile(app, safe)
+                    app.contentResolver.openInputStream(u)?.use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                    val realMime = if (ext == "pdf") "application/pdf" else if (ext == "png") "image/png" else "image/jpeg"
+                    com.rwai.agent.docs.GeneratedFiles.addIncoming(com.rwai.agent.docs.GeneratedFile(out.name, out.absolutePath, realMime))
+                } catch (_: Exception) { }
+            }
+        }.start()
     }
 
     override fun onResume() {

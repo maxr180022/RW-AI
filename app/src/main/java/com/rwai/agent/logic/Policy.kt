@@ -137,6 +137,36 @@ class ConfirmationPolicy(
                     dangerous = false,
                 )
             }
+            "mail_send" -> {
+                val to = call.str("to").orEmpty().trim()
+                val body = call.str("body").orEmpty()
+                val subject = call.str("subject").orEmpty()
+                when {
+                    !MailRules.validAddress(to) -> PolicyDecision.Deny("Неверный адрес получателя: «$to».")
+                    MailRules.isBankSender(to) -> PolicyDecision.Deny(BankGuard.REFUSAL)
+                    SecretRedactor.containsSecret(subject + " " + body, protectedSecrets()) -> PolicyDecision.Deny("Письмо содержит секрет.")
+                    else -> PolicyDecision.Confirm(
+                        title = "Отправить письмо",
+                        details = "Кому: $to\nТема: $subject\n\n${body.take(1200)}",
+                        reason = "Письма отправляются только с вашего подтверждения.",
+                        dangerous = true,
+                    )
+                }
+            }
+            "calendar_add" -> {
+                val start = call.str("start").orEmpty()
+                if (CalendarArgs.parseStart(start) == null) PolicyDecision.Deny("Неверный формат времени «$start». Нужен вид 2026-11-09T15:00.")
+                else PolicyDecision.Confirm(
+                    title = "Добавить событие в календарь",
+                    details = "${call.str("title").orEmpty()}\nНачало: $start\nДлительность: ${call.int("minutes") ?: 60} мин",
+                    reason = "Изменение календаря — только с вашего подтверждения.",
+                    dangerous = false,
+                )
+            }
+            "youtube_search", "play_music" -> {
+                val q = call.str("query").orEmpty()
+                if (SecretRedactor.containsSecret(q, protectedSecrets())) PolicyDecision.Deny("Запрос содержит секрет.") else PolicyDecision.Allow
+            }
             "web_search" -> {
                 val q = call.str("query").orEmpty()
                 if (SecretRedactor.containsSecret(q, protectedSecrets())) PolicyDecision.Deny("Запрос содержит секрет.") else PolicyDecision.Allow

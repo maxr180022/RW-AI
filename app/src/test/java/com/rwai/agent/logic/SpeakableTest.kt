@@ -57,11 +57,15 @@ class WakeTest {
         assertTrue(WakePhrase.matches("ок русь я включи музыку"))
         assertTrue(WakePhrase.matches("okay русся"))
         assertTrue(WakePhrase.matches("океи руси"))
+        assertTrue(WakePhrase.matches("Руся"))
+        assertTrue(WakePhrase.matches("Руся, включи музыку"))
+        assertTrue(WakePhrase.matches("Привет, Руся!"))
+        assertTrue(WakePhrase.matches("привет русь я"))
     }
 
     @Test fun wakePhraseRejects() {
         assertFalse(WakePhrase.matches("окей гугл"))
-        assertFalse(WakePhrase.matches("привет руся")) // без «окей» не просыпаемся: меньше случайных срабатываний
+        assertFalse(WakePhrase.matches("привет русский"))
         assertFalse(WakePhrase.matches("окей русский язык"))
         assertFalse(WakePhrase.matches(""))
     }
@@ -210,5 +214,52 @@ class SafetyAndSpeechTest {
 
     @Test fun aiIsSpelledInRussian() {
         assertEquals("Руся Эй Ай готова", Speakable.clean("Руся AI готова"))
+    }
+}
+
+class ConnectorsTest {
+    @Test fun mailPresetsByDomain() {
+        assertEquals("imap.gmail.com", MailPresets.forAddress("max@gmail.com")!!.imapHost)
+        assertEquals("smtp.yandex.ru", MailPresets.forAddress("a@ya.ru")!!.smtpHost)
+        assertTrue(MailPresets.forAddress("x@icloud.com")!!.smtpStartTls)
+        assertEquals(null, MailPresets.forAddress("x@company.org"))
+        assertTrue(MailPresets.passwordHelp("a@gmail.com").contains("apppasswords"))
+    }
+
+    @Test fun mailRules() {
+        assertTrue(MailRules.validAddress("max.ricco+x@gmail.com")); assertTrue(!MailRules.validAddress("не адрес")); assertTrue(!MailRules.validAddress("a@b"))
+        assertEquals("a@b.com", MailRules.extractAddress("Имя <a@b.com>"))
+        assertTrue(MailRules.isBankSender("Сбер <info@sberbank.ru>"))
+        assertTrue(!MailRules.isBankSender("Ана <ana@gmail.com>"))
+        val out = MailRules.format(listOf(MailItem(5, "Сбер <x@sberbank.ru>", "Выписка", 0, true, "секрет"), MailItem(6, "Ана <ana@gmail.com>", "Привет", 0, true, "как дела")), { "дата" })
+        assertTrue(out.contains("скрыто")); assertTrue(!out.contains("Выписка")); assertTrue(out.contains("НОВОЕ") && out.contains("Привет"))
+    }
+
+    @Test fun mailSendAlwaysConfirmedAndValidated() {
+        val p = ConfirmationPolicy(AutonomyMode.AUTONOMOUS, true)
+        val ctx = ActionContext(currentApp = null)
+        fun call(to: String) = ToolCall("mail_send", mapOf("to" to to, "subject" to "Тема", "body" to "Текст"))
+        assertTrue(p.evaluate(call("ana@gmail.com"), ctx) is PolicyDecision.Confirm)
+        assertTrue(p.evaluate(call("bad"), ctx) is PolicyDecision.Deny)
+        assertTrue(p.evaluate(call("info@sberbank.ru"), ctx) is PolicyDecision.Deny)
+    }
+
+    @Test fun calendarParsingAndConfirm() {
+        val z = java.time.ZoneId.of("UTC")
+        assertEquals(java.time.Instant.parse("2026-11-09T15:00:00Z").toEpochMilli(), CalendarArgs.parseStart("2026-11-09T15:00", z))
+        assertEquals(java.time.Instant.parse("2026-11-09T15:00:00Z").toEpochMilli(), CalendarArgs.parseStart("2026-11-09 15:00", z))
+        assertEquals(null, CalendarArgs.parseStart("завтра", z))
+        val p = ConfirmationPolicy(AutonomyMode.AUTONOMOUS, true)
+        assertTrue(p.evaluate(ToolCall("calendar_add", mapOf("title" to "Встреча", "start" to "2026-11-09T15:00")), ActionContext(null)) is PolicyDecision.Confirm)
+        assertTrue(p.evaluate(ToolCall("calendar_add", mapOf("title" to "Встреча", "start" to "завтра")), ActionContext(null)) is PolicyDecision.Deny)
+    }
+
+    @Test fun newToolsValidate() {
+        assertTrue(ToolCatalog.validate("media_control", mapOf("action" to "next")).first != null)
+        assertTrue(ToolCatalog.validate("media_control", mapOf("action" to "explode")).first == null)
+        assertTrue(ToolCatalog.validate("mail_list", mapOf("limit" to 5L, "unread_only" to true)).first != null)
+        assertTrue(ToolCatalog.validate("mail_list", emptyMap()).first != null)
+        assertTrue(ToolCatalog.validate("mail_read", mapOf("id" to 42L)).first != null)
+        assertTrue(ToolCatalog.validate("play_music", mapOf("query" to "Queen")).first != null)
     }
 }

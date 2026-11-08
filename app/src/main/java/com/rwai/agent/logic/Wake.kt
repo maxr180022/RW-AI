@@ -16,9 +16,12 @@ object WakeGate {
     }
 }
 
-/** Разбор распознанной фразы: «окей, руся» с допуском на неточности распознавания (одна опечатка в имени). */
+/**
+ * Разбор распознанной фразы. Просыпаемся на «Руся», «Окей Руся», «Привет Руся» (с допуском на одну ошибку
+ * распознавания, если перед именем есть «окей/привет»). Одиночное имя принимается только точно — меньше случайных срабатываний.
+ */
 object WakePhrase {
-    private val prefixes = setOf("окей", "океи", "окэй", "оке", "ок", "okay", "ok", "okey")
+    private val prefixes = setOf("окей", "океи", "окэй", "оке", "ок", "okay", "ok", "okey", "привет", "приветик", "здравствуй", "хей", "эй", "hey", "hi")
     private val punctuation = Regex("[^\\p{L}\\p{N}\\s]")
     private val spaces = Regex("\\s+")
 
@@ -29,6 +32,8 @@ object WakePhrase {
         val target = normalize(name).replace(" ", "")
         if (target.isEmpty()) return false
         val tokens = normalize(text).split(" ").filter { it.isNotEmpty() }
+        // Просто имя: точное слово.
+        if (tokens.any { it == target }) return true
         for (i in tokens.indices) {
             if (tokens[i] !in prefixes) continue
             val a = tokens.getOrNull(i + 1) ?: continue

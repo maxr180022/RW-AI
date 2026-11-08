@@ -57,17 +57,19 @@ import kotlinx.coroutines.withContext
 fun SettingsHost(resumeTick: Int, section: Int, onSection: (Int) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(selected = section == 0, onClick = { onSection(0) }, label = { Text("Доступ") })
             FilterChip(selected = section == 1, onClick = { onSection(1) }, label = { Text("Параметры") })
             FilterChip(selected = section == 2, onClick = { onSection(2) }, label = { Text("Профиль") })
+            FilterChip(selected = section == 3, onClick = { onSection(3) }, label = { Text("Подключения") })
         }
         when (section) {
             0 -> PermissionsScreen(resumeTick)
             1 -> SettingsScreen()
-            else -> ProfileScreen()
+            2 -> ProfileScreen()
+            else -> ConnectionsScreen(resumeTick)
         }
     }
 }
@@ -365,7 +367,7 @@ fun SettingsScreen() {
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные Руся AI (память, уведомления, журнал)") }
-        Text("Руся AI 0.3.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
+        Text("Руся AI 0.4.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
     }
 
     if (confirmDeleteKey) {

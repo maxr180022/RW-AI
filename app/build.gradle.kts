@@ -24,7 +24,7 @@ android {
         targetSdk = 35
         // Растёт с каждой облачной сборкой, чтобы новая версия всегда считалась обновлением.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.3.0"
+        versionName = "0.5.0"
         // Только реальные телефоны (экономит ~20 МБ: нативная библиотека распознавания речи)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -76,6 +76,7 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.pickFirsts += setOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES", "META-INF/mailcap", "META-INF/mimetypes.default", "META-INF/javamail.*")
         jniLibs { useLegacyPackaging = true } // JNA/Vosk загружают библиотеки по имени
     }
 
@@ -86,6 +87,8 @@ android {
 
 dependencies {
     // Офлайн-распознавание речи для «Окей, Руся» (Vosk) и его зависимость JNA
+    implementation("com.sun.mail:android-mail:1.6.7")
+    implementation("com.sun.mail:android-activation:1.6.7")
     implementation("com.alphacephei:vosk-android:0.3.47@aar")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation(libs.androidx.core.ktx)

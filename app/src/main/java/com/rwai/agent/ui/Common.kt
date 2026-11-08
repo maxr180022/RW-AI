@@ -6,7 +6,22 @@ import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -17,9 +32,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -38,7 +50,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import com.rwai.agent.Graph
 import com.rwai.agent.R
@@ -74,13 +85,13 @@ fun isDefaultAssistant(ctx: Context): Boolean {
     }
 }
 
-private enum class Dest(val title: String, val icon: String) {
-    AGENT("Агент", "💬"),
-    INBOX("Входящие", "📥"),
-    MEMORY("Память", "🧠"),
-    LOG("Журнал", "📜"),
-    PHONE("Телефон", "🔋"),
-    SETTINGS("Ещё", "⚙️"),
+private enum class Dest(val title: String, val icon: Int) {
+    AGENT("Агент", R.drawable.ic_nav_chat),
+    INBOX("Входящие", R.drawable.ic_nav_inbox),
+    MEMORY("Память", R.drawable.ic_nav_memory),
+    LOG("Журнал", R.drawable.ic_nav_log),
+    PHONE("Телефон", R.drawable.ic_nav_phone),
+    SETTINGS("Ещё", R.drawable.ic_nav_more),
 }
 
 @Composable
@@ -103,24 +114,9 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                Dest.entries.forEachIndexed { i, d ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
-                        icon = { Text(d.icon, fontSize = 20.sp) },
-                        label = { Text(d.title, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                }
-            }
-        },
+        containerColor = Color.Transparent,
+        modifier = Modifier.background(MaterialTheme.colorScheme.background).neuralGlow(),
+        bottomBar = { RwBottomBar(selected = tab, onSelect = { tab = it }) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             AppHeader(Dest.entries[tab].title)
@@ -145,17 +141,101 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     }
 }
 
+/** Фон «нейросети»: два мягких радиальных свечения (синее сверху‑слева, розовое снизу‑справа). */
+private fun Modifier.neuralGlow(): Modifier = this.drawBehind {
+    drawRect(
+        Brush.radialGradient(
+            colors = listOf(RwPalette.Blue.copy(alpha = 0.20f), Color.Transparent),
+            center = Offset(size.width * 0.1f, size.height * 0.02f),
+            radius = size.width * 0.95f,
+        ),
+    )
+    drawRect(
+        Brush.radialGradient(
+            colors = listOf(RwPalette.Pink.copy(alpha = 0.13f), Color.Transparent),
+            center = Offset(size.width * 0.95f, size.height * 0.98f),
+            radius = size.width * 0.9f,
+        ),
+    )
+}
+
+/** Компактная нижняя панель: 52 dp, маленькие иконки, подпись 10 sp, активная вкладка — градиентная «таблетка». */
+@Composable
+private fun RwBottomBar(selected: Int, onSelect: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().background(Color(0xE6070B18)).navigationBarsPadding()) {
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(glowBorder()))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Dest.entries.forEachIndexed { i, d ->
+                val on = selected == i
+                val tint by animateColorAsState(
+                    if (on) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    tween(180), label = "tint",
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onSelect(i) }
+                        .padding(vertical = 5.dp, horizontal = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .height(24.dp)
+                            .width(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .then(if (on) Modifier.background(accentBrush()) else Modifier),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter = painterResource(d.icon),
+                            contentDescription = d.title,
+                            colorFilter = ColorFilter.tint(tint),
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    Text(
+                        d.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tint,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 1.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AppHeader(title: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        BrandMark(36.dp)
-        Column {
-            Text("Руся AI", style = MaterialTheme.typography.titleMedium)
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        BrandMark(32.dp)
+        Text(
+            "Руся AI",
+            style = MaterialTheme.typography.titleLarge.copy(brush = brandBrush()),
+        )
+        Spacer(Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .border(1.dp, glowBorder(), RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.04f))
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -177,7 +257,11 @@ fun BrandMark(size: Dp) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp))
+    Row(modifier = Modifier.padding(top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(accentBrush()))
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.titleMedium)
+    }
 }
 
 @Composable

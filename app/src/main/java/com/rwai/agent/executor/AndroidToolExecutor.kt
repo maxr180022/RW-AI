@@ -53,6 +53,18 @@ class AndroidToolExecutor(
         "fetch_page" -> fetchPage(call.str("url").orEmpty())
         "ask_claude_code" -> askClaudeCode(call.str("task").orEmpty())
         "phone_status" -> phoneStatus()
+        "media_status" -> ToolResult.ok(com.rwai.agent.connectors.MediaControl.status(context), untrusted = true)
+        "media_control" -> mediaControl(call.str("action").orEmpty())
+        "play_music" -> playMusic(call.str("query").orEmpty(), call.str("app"))
+        "youtube_search" -> youtubeSearch(call.str("query").orEmpty())
+        "calendar_events" -> calendarEvents(call.int("days") ?: 3)
+        "calendar_add" -> calendarAdd(call)
+        "make_pdf" -> makePdf(call.str("file_name"), call.str("content").orEmpty())
+        "draw_image" -> drawImage(call.str("file_name"), call.str("commands").orEmpty())
+        "annotate_document" -> annotateDocument(call.str("source"), call.str("commands").orEmpty())
+        "mail_list" -> mailList(call)
+        "mail_read" -> mailRead(call.int("id") ?: 0)
+        "mail_send" -> mailSend(call)
         "inspect_screen" -> withScreen { cap -> ToolResult.ok(UiFormatter.format(cap.packageName, cap.infos), untrusted = true) }
         "find_text" -> findText(call.str("query").orEmpty())
         "tap_text" -> tapText(call.str("text").orEmpty(), call.int("index") ?: 0)
@@ -187,6 +199,65 @@ class AndroidToolExecutor(
     private fun leaksPrivateData(text: String): Boolean =
         com.rwai.agent.logic.ProfileTemplates.redact(text, com.rwai.agent.Graph.profile.values()) != text
 
+    // --------------------------------------------------------------------------------------------- документы
+
+    private fun registerDoc(f: com.rwai.agent.docs.GeneratedFile, index: List<com.rwai.agent.logic.LineBox>? = null): com.rwai.agent.docs.GeneratedFile {
+        val saved = com.rwai.agent.docs.DocFiles.copyToDownloads(context, f)
+        val full = com.rwai.agent.docs.GeneratedFile(f.name, f.path, f.mime, saved)
+        com.rwai.agent.docs.GeneratedFiles.add(full, index)
+        return full
+    }
+
+    private suspend fun makePdf(fileName: String?, content: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val exp = com.rwai.agent.logic.ProfileTemplates.expand(content, com.rwai.agent.Graph.profile.values())
+            val parsed = com.rwai.agent.logic.DocMarkup.parse(exp.text)
+            if (parsed.blocks.isEmpty()) return@withContext ToolResult.failed("Документ пустой.")
+            val out = com.rwai.agent.docs.DocFiles.uniqueFile(context, com.rwai.agent.logic.DocMarkup.fileName(fileName, "pdf", "Документ"))
+            val r = com.rwai.agent.docs.PdfBuilder.build(parsed.blocks, out)
+            val f = registerDoc(com.rwai.agent.docs.GeneratedFile(out.name, out.absolutePath, "application/pdf"), r.index)
+            val notes = buildList {
+                addAll(parsed.warnings)
+                if (exp.missing.isNotEmpty()) add("В профиле нет данных: " + exp.missing.joinToString(", ") + " — в тексте остались метки, попроси владельца дополнить профиль.")
+            }
+            ToolResult.ok("PDF готов: ${f.name}, страниц: ${r.pages}. Владелец видит кнопки «Открыть / Поделиться / Скачать»." + (f.savedTo?.let { " Копия: $it." } ?: "") + (if (notes.isEmpty()) "" else " " + notes.joinToString(" ")))
+        } catch (e: Exception) {
+            ToolResult.failed("Не удалось создать PDF: " + (e.message ?: e.javaClass.simpleName).take(160))
+        }
+    }
+
+    private suspend fun drawImage(fileName: String?, commands: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val p = com.rwai.agent.logic.ShapeMarkup.parse(commands)
+            if (p.shapes.isEmpty()) return@withContext ToolResult.failed("Нет корректных команд. " + p.errors.take(3).joinToString("; "))
+            val bmp = com.rwai.agent.docs.Drawing.renderImage(p.shapes)
+            val f = registerDoc(com.rwai.agent.docs.Drawing.savePng(context, bmp, com.rwai.agent.logic.DocMarkup.fileName(fileName, "png", "Картинка")))
+            bmp.recycle()
+            ToolResult.ok("Картинка готова: ${f.name}. Владелец видит кнопки «Открыть / Поделиться / Скачать»." + (if (p.errors.isEmpty()) "" else " Ошибки в командах: " + p.errors.take(3).joinToString("; ")))
+        } catch (e: Exception) {
+            ToolResult.failed("Не удалось нарисовать: " + (e.message ?: e.javaClass.simpleName).take(160))
+        } catch (e: OutOfMemoryError) {
+            ToolResult.failed("Не хватило памяти, уменьшите размер canvas.")
+        }
+    }
+
+    private suspend fun annotateDocument(source: String?, commands: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val src = com.rwai.agent.docs.GeneratedFiles.find(source)
+                ?: return@withContext ToolResult.failed("Нет файла для разметки. Создайте документ или поделитесь PDF/картинкой с приложением.")
+            val p = com.rwai.agent.logic.ShapeMarkup.parse(commands)
+            if (p.shapes.isEmpty()) return@withContext ToolResult.failed("Нет корректных команд. " + p.errors.take(3).joinToString("; "))
+            val r = com.rwai.agent.docs.Drawing.annotate(context, src, p.shapes, src.name.substringBeforeLast('.') + "_разметка")
+            val f = registerDoc(r.file)
+            val bad = p.errors.take(3) + (if (r.missing.isEmpty()) emptyList() else listOf("не найдены фразы: " + r.missing.joinToString(", ") { "«$it»" } + " (поиск по тексту работает только для PDF, созданных этим приложением)"))
+            ToolResult.ok("Разметка готова: ${f.name}, пометок: ${r.marks}." + (if (bad.isEmpty()) "" else " " + bad.joinToString("; ")))
+        } catch (e: Exception) {
+            ToolResult.failed("Не удалось сделать разметку: " + (e.message ?: e.javaClass.simpleName).take(160))
+        } catch (e: OutOfMemoryError) {
+            ToolResult.failed("Не хватило памяти для разметки.")
+        }
+    }
+
     private suspend fun webSearch(query: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (query.isBlank()) return@withContext ToolResult.failed("Пустой запрос.")
         if (leaksPrivateData(query)) return@withContext ToolResult.failed("В запросе есть личные данные владельца. Переформулируй запрос обезличенно.")
@@ -199,6 +270,96 @@ class AndroidToolExecutor(
         } catch (e: java.io.IOException) {
             ToolResult.failed("Нет доступа к интернету или поисковик не отвечает.")
         }
+    }
+
+    // ------------------------------------------------------------------ подключения: музыка, YouTube, календарь, почта
+
+    private fun mediaControl(action: String): ToolResult =
+        com.rwai.agent.connectors.MediaControl.control(context, action)?.let { ToolResult.failed(it) } ?: ToolResult.ok("Выполнено: $action.")
+
+    private suspend fun playMusic(query: String, app: String?): ToolResult {
+        if (query.isBlank()) return ToolResult.failed("Пустой запрос.")
+        if (isLocked()) return lockedResult()
+        val pkg = app?.let { com.rwai.agent.logic.MediaActions.knownApps[it.trim().lowercase()] }
+        val starter = RwAccessibilityService.instance ?: context
+        try {
+            starter.startActivity(com.rwai.agent.connectors.MediaControl.playIntent(query, pkg))
+        } catch (e: Exception) {
+            // Нет приложения, понимающего «включить по запросу»: открываем поиск YouTube Music / YouTube
+            return try {
+                starter.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=" + java.net.URLEncoder.encode(query, "UTF-8"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ToolResult.ok("Нет плеера, который включает по запросу напрямую; открыл поиск «$query» в YouTube Music. Включить трек придётся нажатием.")
+            } catch (e2: Exception) {
+                ToolResult.failed("Не нашёл приложение для воспроизведения музыки.")
+            }
+        }
+        delay(3000)
+        return ToolResult.ok("Запрос «$query» отправлен плееру. Сейчас: " + com.rwai.agent.connectors.MediaControl.status(context), untrusted = true)
+    }
+
+    private suspend fun youtubeSearch(query: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (query.isBlank()) return@withContext ToolResult.failed("Пустой запрос.")
+        if (leaksPrivateData(query)) return@withContext ToolResult.failed("В запросе есть личные данные владельца.")
+        val key = com.rwai.agent.Graph.secretStore.get("youtube_api_key")
+        if (key.isNullOrBlank()) {
+            if (isLocked()) return@withContext lockedResult()
+            return@withContext try {
+                (RwAccessibilityService.instance ?: context).startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(query, "UTF-8"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                ToolResult.ok("Открыл поиск YouTube по запросу «$query». Ключ YouTube API не задан, поэтому списка результатов нет (Ещё → Подключения).")
+            } catch (e: Exception) { ToolResult.failed("Не удалось открыть YouTube.") }
+        }
+        try {
+            ToolResult.ok(com.rwai.agent.connectors.YouTubeClient.search(key, query), untrusted = true)
+        } catch (e: java.io.IOException) {
+            ToolResult.failed((e.message ?: "Нет связи с YouTube.").replace(key, "***"))
+        }
+    }
+
+    private fun calendarEvents(days: Int): ToolResult {
+        if (!com.rwai.agent.connectors.CalendarClient.canRead(context)) return ToolResult.unavailable("Нет доступа к календарю. Включите его: Ещё → Подключения → Календарь.")
+        return try {
+            ToolResult.ok(com.rwai.agent.connectors.CalendarClient.events(context, days.coerceIn(1, 14)), untrusted = true)
+        } catch (e: Exception) { ToolResult.failed("Не удалось прочитать календарь: ${e.javaClass.simpleName}.") }
+    }
+
+    private fun calendarAdd(call: ToolCall): ToolResult {
+        if (!com.rwai.agent.connectors.CalendarClient.canWrite(context)) return ToolResult.unavailable("Нет права записи в календарь. Включите его: Ещё → Подключения → Календарь.")
+        val start = com.rwai.agent.logic.CalendarArgs.parseStart(call.str("start").orEmpty()) ?: return ToolResult.failed("Неверный формат времени. Нужен вид 2026-11-09T15:00.")
+        return try {
+            com.rwai.agent.connectors.CalendarClient.add(context, call.str("title").orEmpty(), start, call.int("minutes") ?: 60, call.str("notes"))
+                ?.let { ToolResult.failed(it) } ?: ToolResult.ok("Событие «${call.str("title")}» добавлено в календарь.")
+        } catch (e: Exception) { ToolResult.failed("Не удалось добавить событие: ${e.javaClass.simpleName}.") }
+    }
+
+    private fun mailAccount() = com.rwai.agent.connectors.MailStore.load()
+    private val noMail = "Почта не подключена. Подключите её: Ещё → Подключения → Почта."
+
+    private suspend fun mailList(call: ToolCall): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val acc = mailAccount() ?: return@withContext ToolResult.unavailable(noMail)
+        val q = call.str("query")
+        if (!q.isNullOrBlank() && leaksPrivateData(q)) return@withContext ToolResult.failed("В запросе есть личные данные владельца.")
+        try {
+            val items = com.rwai.agent.connectors.MailClient.list(acc, (call.int("limit") ?: 10).coerceIn(1, 20), call.bool("unread_only") == true, q)
+            ToolResult.ok(com.rwai.agent.logic.MailRules.format(items) { timeFmt.format(Date(it)) }, untrusted = true)
+        } catch (e: com.rwai.agent.connectors.MailException) { ToolResult.failed(e.message ?: "Ошибка почты") }
+    }
+
+    private suspend fun mailRead(id: Int): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val acc = mailAccount() ?: return@withContext ToolResult.unavailable(noMail)
+        if (id <= 0) return@withContext ToolResult.failed("Нужен номер письма из mail_list.")
+        try {
+            ToolResult.ok(com.rwai.agent.connectors.MailClient.read(acc, id.toLong()) { timeFmt.format(Date(it)) }, untrusted = true)
+        } catch (e: com.rwai.agent.connectors.MailException) { ToolResult.failed(e.message ?: "Ошибка почты") }
+    }
+
+    private suspend fun mailSend(call: ToolCall): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val acc = mailAccount() ?: return@withContext ToolResult.unavailable(noMail)
+        try {
+            com.rwai.agent.connectors.MailClient.send(acc, call.str("to").orEmpty().trim(), call.str("subject").orEmpty(), call.str("body").orEmpty())
+            ToolResult.ok("Письмо отправлено на ${call.str("to")} (принято почтовым сервером).")
+        } catch (e: com.rwai.agent.connectors.MailException) { ToolResult.failed(e.message ?: "Ошибка почты") }
     }
 
     /** Состояние телефона из системных API: без интерфейса, без открытия приложений. */
