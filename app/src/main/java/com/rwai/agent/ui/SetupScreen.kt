@@ -154,6 +154,7 @@ fun SetupScreen(resumeTick: Int, onBegin: () -> Unit, onFinish: () -> Unit) {
                                     val r = Graph.brain.validate()
                                     if (r.ok) {
                                         connected = true
+                                        if (Graph.settings.current.quickReply) com.rwai.agent.core.AgentNotifications.showQuick(Graph.appContext())
                                     } else {
                                         Graph.settings.deleteApiKey()
                                         error = r.message

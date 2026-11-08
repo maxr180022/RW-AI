@@ -70,6 +70,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         resumeTick.intValue++
         AgentNotifications.clearResult(this)
+        Graph.controller.rolloverIfNewDay()
+        if (Graph.settings.current.quickReply && Graph.settings.hasApiKey.value) AgentNotifications.showQuick(this)
     }
 
     companion object {

@@ -24,6 +24,7 @@ class VoiceInput(private val context: Context) {
         onResult: (String, Float?) -> Unit,
         onFail: (String) -> Unit,
         onListening: () -> Unit = {},
+        onLevel: (Float) -> Unit = {},
     ) {
         stop()
         if (!isAvailable()) {
@@ -35,9 +36,9 @@ class VoiceInput(private val context: Context) {
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = onListening()
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) = onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() = onLevel(0f)
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onPartialResults(partialResults: Bundle?) {

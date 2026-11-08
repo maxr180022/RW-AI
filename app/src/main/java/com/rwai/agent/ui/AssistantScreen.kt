@@ -4,6 +4,15 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.height
@@ -74,6 +83,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
     val settings by Graph.settings.state.collectAsState()
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
+    var level by remember { mutableFloatStateOf(0f) }
     var voiceNote by remember { mutableStateOf<String?>(null) }
     val voice = remember { VoiceInput(ctx) }
     DisposableEffect(Unit) { onDispose { voice.stop() } }
@@ -121,19 +131,23 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
         voiceNote = null
         voice.start(
             languageTag = settings.language,
+            onLevel = { level = it },
             onPartial = { input = it },
             onResult = { text, confidence ->
                 listening = false
+                level = 0f
                 input = text
                 if (settings.voiceAutoRun && (confidence == null || confidence >= 0.6f)) {
                     Graph.controller.submit(text)
                     input = ""
+                    voiceNote = null
                 } else {
                     voiceNote = "Проверьте распознанный текст и нажмите «Отправить»."
                 }
             },
             onFail = { msg ->
                 listening = false
+                level = 0f
                 voiceNote = msg
             },
         )
@@ -336,27 +350,54 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(26.dp),
-                placeholder = { Text(if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
+                placeholder = { Text(if (listening) "Слушаю… говорите" else if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
                 maxLines = 4,
             )
-            FilledTonalIconButton(
-                onClick = {
-                    if (listening) {
-                        voice.stop()
-                        listening = false
-                    } else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        startListening()
-                    } else {
-                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-                modifier = Modifier.size(52.dp),
-            ) { Text(if (listening) "⏺" else "🎤", fontSize = 22.sp) }
+            val pulse by animateFloatAsState(if (listening) 1f + level * 0.9f else 1f, label = "micPulse")
+            val breath by rememberInfiniteTransition(label = "micBreath").animateFloat(
+                initialValue = 1f,
+                targetValue = 1.18f,
+                animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+                label = "micBreathValue",
+            )
+            Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                if (listening) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .graphicsLayer {
+                                val sc = pulse * breath
+                                scaleX = sc
+                                scaleY = sc
+                                alpha = 0.35f
+                            }
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.error),
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = {
+                        if (listening) {
+                            voice.stop()
+                            listening = false
+                            level = 0f
+                        } else if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            startListening()
+                        } else {
+                            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    modifier = Modifier.size(52.dp),
+                    colors = if (listening) IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
+                    else IconButtonDefaults.filledTonalIconButtonColors(),
+                ) { Text(if (listening) "⏹" else "🎤", fontSize = 22.sp) }
+            }
             FilledIconButton(
                 enabled = (input.isNotBlank() || photos.isNotEmpty()) && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION,
                 onClick = {
                     Graph.controller.submit(input, photos)
                     input = ""
+                    voiceNote = null
                     photos = emptyList()
                     photoNote = null
                 },
