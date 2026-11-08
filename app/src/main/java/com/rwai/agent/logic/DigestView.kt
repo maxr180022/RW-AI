@@ -31,6 +31,35 @@ object DigestView {
         }
     }
 
+    /** Карточки, на которые нужно ответить: срочное, «ждут ответа» и личные сообщения. Остальные (заметки, договорённости) — только информация. */
+    fun needsReply(kind: DigestKind): Boolean = kind == DigestKind.URGENT || kind == DigestKind.WAITING || kind == DigestKind.PERSON
+
+    /** Ключ карточки для отметки «отвечено»: у новой сводки карточки новые, у прежней — те же. */
+    fun cardKey(text: String, index: Int, item: DigestItem): String =
+        Integer.toHexString(text.hashCode()) + ":" + index + ":" + Integer.toHexString(((item.title ?: "") + item.body).hashCode())
+
+    /**
+     * Команда владельца, которая видна в чате: его указание и к какой карточке оно относится.
+     * Текст самой карточки (он пришёл из чужих сообщений) сюда не попадает: он передаётся модели отдельно как недоверенные данные.
+     * null — указание пустое или для этого типа карточки ответа нет.
+     */
+    fun replyTask(item: DigestItem, instruction: String): String? {
+        val ins = instruction.trim()
+        if (ins.isEmpty()) return null
+        val who = item.person()
+        return when (item.kind) {
+            DigestKind.PERSON ->
+                if (who != null) "Ответь ${who.first}" + (who.second?.let { " в $it" } ?: "") + ": $ins"
+                else "Ответь по сообщению из «Входящих»: $ins"
+            DigestKind.WAITING -> "По сообщениям, которые ждут ответа: $ins"
+            DigestKind.URGENT -> "Разберись со срочным сообщением: $ins"
+            else -> null
+        }
+    }
+
+    /** Текст карточки, который уходит модели вместе с указанием (как справка, не как команда). */
+    fun contextFor(item: DigestItem): String = ((item.title?.let { "$it: " } ?: "") + item.body).take(400)
+
     fun parse(text: String): List<DigestItem> {
         data class Acc(var title: String?, val body: StringBuilder)
         val acc = mutableListOf<Acc>()
@@ -85,4 +114,17 @@ object Md {
         if (sb.isNotEmpty()) out += sb.toString() to bold
         return out
     }
+}
+
+/** Какие карточки «Входящих» владелец уже отработал (ответил или поручил агенту). Хранится строкой «ключ на строку», самые старые выпадают. */
+object AnsweredCards {
+    const val CAP = 300
+
+    fun parse(raw: String): List<String> = raw.split('\n').filter { it.isNotBlank() }
+
+    fun has(raw: String, key: String): Boolean = key in parse(raw)
+
+    fun add(raw: String, key: String): String = (parse(raw).filter { it != key } + key).takeLast(CAP).joinToString("\n")
+
+    fun remove(raw: String, key: String): String = parse(raw).filter { it != key }.joinToString("\n")
 }

@@ -31,11 +31,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.rwai.agent.Graph
+import com.rwai.agent.core.Phase
+import com.rwai.agent.digest.AnsweredStore
+import com.rwai.agent.logic.AnsweredCards
+import com.rwai.agent.logic.DigestKind
+import com.rwai.agent.logic.DigestView
 import com.rwai.agent.data.ActivityRow
 import com.rwai.agent.data.MemoryRow
 import com.rwai.agent.data.NotificationRow
@@ -111,7 +115,11 @@ fun InboxScreen(resumeTick: Int) {
 
 @Composable
 private fun DigestCards(ts: Long?, text: String) {
-    val items = remember(text) { com.rwai.agent.logic.DigestView.parse(text) }
+    val items = remember(text) { DigestView.parse(text) }
+    var answered by remember { mutableStateOf(AnsweredStore.raw()) }
+    var composing by remember(text) { mutableStateOf<String?>(null) } // ключ карточки, у которой открыто поле «что сделать»
+    var draft by remember(text) { mutableStateOf("") }
+    var hint by remember(text) { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "Сводка" + (ts?.let { " · " + dateFmt.format(Date(it)) } ?: ""),
@@ -121,33 +129,69 @@ private fun DigestCards(ts: Long?, text: String) {
         if (items.isEmpty()) {
             GlassCard { MdText(text) }
         }
-        items.forEach { it0 ->
-            val (accent, tag) = when (it0.kind) {
-                com.rwai.agent.logic.DigestKind.URGENT -> Color(0xFFFF4D6D) to "Срочно"
-                com.rwai.agent.logic.DigestKind.WAITING -> Color(0xFFFFB020) to "Ждут ответа"
-                com.rwai.agent.logic.DigestKind.DEAL -> Color(0xFF2ECC8F) to "Договорённости"
-                com.rwai.agent.logic.DigestKind.PERSON -> RwPalette.Blue to "Сообщение"
-                com.rwai.agent.logic.DigestKind.NOTE -> RwPalette.Violet to "Заметка"
+        items.forEachIndexed { index, it0 ->
+            val key = DigestView.cardKey(text, index, it0)
+            val needs = DigestView.needsReply(it0.kind)
+            val done = needs && AnsweredCards.has(answered, key)
+            // Цвета только из палитры приложения: красный — ждёт ответа, зелёный — уже отработано, остальное — просто информация.
+            val (accent, tag) = when {
+                done -> RwPalette.Success to "Отвечено"
+                it0.kind == DigestKind.URGENT -> RwPalette.Danger to "Срочно · не отвечено"
+                it0.kind == DigestKind.WAITING -> RwPalette.Danger to "Ждут ответа · не отвечено"
+                it0.kind == DigestKind.PERSON -> RwPalette.Danger to "Сообщение · не отвечено"
+                it0.kind == DigestKind.DEAL -> RwPalette.Blue to "Договорённости"
+                else -> RwPalette.Violet to "Заметка"
             }
             GlassCard(accent = accent) {
                 Text(tag.uppercase(), style = MaterialTheme.typography.labelSmall, color = accent)
-                val head = it0.title?.takeIf { t -> t.isNotBlank() && !t.equals(tag, true) }
-                if (head != null) Text(head, style = MaterialTheme.typography.titleSmall)
-                if (it0.body.isNotBlank()) MdText(it0.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f))
-                val who = it0.person()
-                val actions = buildList<Pair<String, String>> {
-                    when (it0.kind) {
-                        com.rwai.agent.logic.DigestKind.PERSON ->
-                            if (who != null) add("Ответить" to "Подготовь ответ для ${who.first}" + (who.second?.let { a -> " в $a" } ?: "") + " по последним сообщениям и покажи черновик, не отправляй.")
-                        com.rwai.agent.logic.DigestKind.WAITING -> add("Ответить" to "Кому нужно ответить сейчас? Подготовь короткие ответы и покажи черновики.")
-                        com.rwai.agent.logic.DigestKind.URGENT -> add("Разобраться" to "Помоги разобраться: ${it0.body.take(200)}")
-                        com.rwai.agent.logic.DigestKind.DEAL -> add("В календарь" to "Добавь в календарь: ${it0.body.take(200)}")
-                        else -> {}
-                    }
+                val kindLabel = when (it0.kind) {
+                    DigestKind.URGENT -> "Срочно"; DigestKind.WAITING -> "Ждут ответа"; DigestKind.PERSON -> "Сообщение"; DigestKind.DEAL -> "Договорённости"; else -> "Заметка"
                 }
-                if (actions.isNotEmpty()) {
+                val head = it0.title?.takeIf { t -> t.isNotBlank() && !t.equals(kindLabel, true) }
+                if (head != null) Text(head, style = MaterialTheme.typography.titleSmall)
+                if (it0.body.isNotBlank()) MdText(it0.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (done) 0.62f else 0.88f))
+                if (needs) {
+                    // Кнопка остаётся всегда, и после ответа: можно ответить ещё раз или вернуть карточку в «не отвечено».
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        actions.forEach { (label, cmd) -> ActionPill(label, accent = true) { AgentPrefill.text.value = cmd } }
+                        ActionPill(if (it0.kind == DigestKind.URGENT) "Разобраться" else "Ответить", accent = !done) {
+                            composing = if (composing == key) null else key
+                            hint = null
+                        }
+                        if (done) ActionPill("Не отвечено") { answered = AnsweredStore.unmark(key) }
+                    }
+                    if (composing == key) {
+                        OutlinedTextField(
+                            value = draft,
+                            onValueChange = { draft = it.take(500) },
+                            label = { Text("Что сделать?") },
+                            minLines = 2,
+                            maxLines = 5,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ActionPill("Отправить", accent = true) {
+                                val task = DigestView.replyTask(it0, draft)
+                                when {
+                                    task == null -> hint = "Напишите, что нужно сделать."
+                                    !Graph.settings.hasApiKey.value -> hint = "Сначала введите API-ключ DeepSeek в настройках."
+                                    Graph.controller.state.value.phase != Phase.IDLE -> hint = "Агент занят: дождитесь окончания задачи или нажмите «Стоп» на вкладке «Агент»."
+                                    else -> {
+                                        Graph.controller.submit(task, attach = DigestView.contextFor(it0))
+                                        answered = AnsweredStore.mark(key)
+                                        composing = null
+                                        draft = ""
+                                        hint = null
+                                        AgentPrefill.text.value = "" // переключает на вкладку «Агент», чтобы видеть работу
+                                    }
+                                }
+                            }
+                            ActionPill("Отмена") { composing = null; hint = null }
+                        }
+                        hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                } else if (it0.kind == DigestKind.DEAL) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        ActionPill("В календарь", accent = true) { AgentPrefill.text.value = "Добавь в календарь: ${it0.body.take(200)}" }
                     }
                 }
             }
