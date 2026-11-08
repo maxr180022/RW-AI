@@ -205,6 +205,12 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        DialogMemoryBar(
+            title = state.dialogTitle,
+            project = state.projectName,
+            percent = state.fillPercent,
+            note = state.carriedFrom.takeIf { it.isNotBlank() && state.chat.isEmpty() }?.let { "Память диалога $it передана сюда в сжатом виде." },
+        )
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

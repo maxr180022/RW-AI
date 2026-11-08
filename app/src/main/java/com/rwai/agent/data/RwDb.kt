@@ -21,7 +21,17 @@ data class MemoryRow(val id: Long, val ts: Long, val source: String, val app: St
  * Локальная база: журнал действий, уведомления и память с полнотекстовым поиском (FTS4, unicode61 —
  * корректно сравнивает регистр кириллицы). Всё хранится только на устройстве; резервное копирование выключено.
  */
-class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 2) {
+class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 3) {
+
+    /** Диалоги и проекты (v3). Живут в той же базе, чистятся вместе с остальными данными. */
+    val dialogStore: DialogStore by lazy { DialogStore(this) }
+
+    private fun createDialogTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS dialogs(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, project_id INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL, summary TEXT NOT NULL DEFAULT '', carried_from TEXT NOT NULL DEFAULT '', ctx_from INTEGER NOT NULL DEFAULT 0, compactions INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS dialog_msgs(id INTEGER PRIMARY KEY AUTOINCREMENT, dialog_id INTEGER NOT NULL, ts INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_dialog_msgs_dialog ON dialog_msgs(dialog_id)")
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE activity(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, task_id INTEGER NOT NULL, kind TEXT NOT NULL, tool TEXT, detail TEXT NOT NULL, status TEXT NOT NULL)")
@@ -30,6 +40,7 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
         db.execSQL("CREATE INDEX idx_notifications_ts ON notifications(ts)")
         db.execSQL("CREATE TABLE memory(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, app TEXT, contact TEXT, title TEXT NOT NULL, body TEXT NOT NULL)")
         db.execSQL("CREATE VIRTUAL TABLE memory_fts USING fts4(title, body, tokenize=unicode61)")
+        createDialogTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -38,6 +49,7 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
             db.execSQL("ALTER TABLE notifications ADD COLUMN grp INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE notifications ADD COLUMN tr TEXT")
         }
+        if (oldVersion < 3) createDialogTables(db)   // v3: диалоги и проекты; старые данные не затрагиваются
     }
 
     // ---------------- Журнал действий ----------------
@@ -205,7 +217,8 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
             db.delete("activity", "ts < ?", arrayOf(cutoffTs.toString()))
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
+        dialogStore.purgeOlderThan(cutoffTs)
     }
 
-    fun wipeAll() { clearActivity(); clearNotifications(); clearMemory() }
+    fun wipeAll() { clearActivity(); clearNotifications(); clearMemory(); dialogStore.wipe() }
 }

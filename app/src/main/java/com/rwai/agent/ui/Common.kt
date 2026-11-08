@@ -32,9 +32,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -172,6 +179,16 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     }
     val inSub = tab == Dest.MORE.ordinal && more != M_HUB
 
+    // Боковое меню «Диалоги»: открывается кнопкой с тремя палочками в шапке (и свайпом от левого края) на вкладке «Агент».
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    androidx.activity.compose.BackHandler(enabled = drawerState.isOpen) { drawerScope.launch { drawerState.close() } }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = tab == Dest.AGENT.ordinal,
+        drawerContent = { DialogsDrawer(onClose = { drawerScope.launch { drawerState.close() } }) },
+    ) {
     Scaffold(
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
@@ -182,6 +199,7 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
             AppHeader(
                 title = if (tab == Dest.MORE.ordinal) subTitle else Dest.entries[tab].title,
                 back = if (inSub) ({ more = M_HUB }) else null,
+                onMenu = if (tab == Dest.AGENT.ordinal) ({ drawerScope.launch { drawerState.open() } }) else null,
             )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (Dest.entries[tab]) {
@@ -209,6 +227,7 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
                 }
             }
         }
+    }
     }
 }
 
@@ -287,12 +306,31 @@ private fun RwBottomBar(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 @Composable
-private fun AppHeader(title: String, back: (() -> Unit)? = null) {
+private fun AppHeader(title: String, back: (() -> Unit)? = null, onMenu: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (onMenu != null) {
+            // Три палочки: та же «стеклянная» таблетка, что и подпись раздела справа.
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(50))
+                    .border(1.dp, glowBorder(), RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .clickable(onClick = onMenu)
+                    .semantics { contentDescription = "Меню: диалоги и проекты" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(3) {
+                        Box(modifier = Modifier.width(16.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(MaterialTheme.colorScheme.onSurface))
+                    }
+                }
+            }
+        }
         LogoMark(34.dp)
         Text(
             "Руся AI",
