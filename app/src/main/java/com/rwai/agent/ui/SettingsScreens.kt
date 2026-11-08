@@ -290,11 +290,11 @@ fun SettingsScreen() {
 
         SectionTitle("После выполнения задачи")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            listOf("home" to "На главный экран", "app" to "В RW AI", "stay" to "Остаться").forEach { (v, label) ->
+            listOf("origin" to "Туда, откуда вызвал", "home" to "На главный экран", "app" to "В RW AI", "stay" to "Остаться").forEach { (v, label) ->
                 FilterChip(selected = settings.afterTask == v, onClick = { Graph.settings.update { it.copy(afterTask = v) } }, label = { Text(label) })
             }
         }
-        Text("Если агент задаёт вопрос, приложение RW AI открывается всегда.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Если агент задаёт вопрос текстом, RW AI открывается. Если вы говорили голосом, вопрос озвучивается без открытия приложения.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         SectionTitle("Язык и голос")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {

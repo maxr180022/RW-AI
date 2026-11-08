@@ -78,6 +78,9 @@ class AgentController(
 
     /** Задача пришла голосом/из шторки: ответ нужно озвучить, не открывая приложение. */
     @Volatile private var speakTask = false
+
+    /** Приложение, из которого дана команда: туда агент вернёт владельца после задачи. */
+    @Volatile private var originPkg: String? = null
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
     private var pendingQuestion: Pair<String, String>? = null
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -129,6 +132,7 @@ class AgentController(
         val command = pendingQuestion?.let { (orig, q) -> "Исходная задача: $orig\nТы спросил: $q\nОтвет владельца: $text" } ?: text
         pendingQuestion = null
         speakTask = speak
+        originPkg = com.rwai.agent.accessibility.RwAccessibilityService.instance?.originPackage()
         addChat(ChatRole.USER, text, photos.map { it.thumb })
         val taskId = System.currentTimeMillis()
         AgentService.start(appContext)
@@ -174,6 +178,7 @@ class AgentController(
     private suspend fun runTask(taskId: Long, command: String, original: String, images: List<String> = emptyList()) {
         val s = settings.current
         val speakNow = speakTask
+        val origin = originPkg
         val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t), s.language) }
         val secrets = { listOfNotNull(settings.apiKey()) }
         val redact: (String) -> String = { SecretRedactor.redact(it, secrets()) }
@@ -203,7 +208,7 @@ class AgentController(
                     appendCarry(original, redact(outcome.summary))
                     if (s.speakResults || speakNow) say(outcome.summary)
                     AgentNotifications.showResult(appContext, "RW AI: задача выполнена", outcome.summary)
-                    returnAfterTask(false)
+                    returnAfterTask(false, speakNow, origin)
                     setIdle("Готов")
                 }
                 is AgentOutcome.NeedsInput -> {
@@ -212,19 +217,19 @@ class AgentController(
                     if (speakNow) say(outcome.question)
                     AgentNotifications.showResult(appContext, "RW AI задаёт вопрос", outcome.question)
                     _state.update { it.copy(phase = Phase.WAITING_INPUT, status = "Жду ваш ответ", confirmation = null) }
-                    returnAfterTask(true)
+                    returnAfterTask(true, speakNow, origin)
                 }
                 is AgentOutcome.Stopped -> {
                     addChat(ChatRole.SYSTEM, outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: задача остановлена", outcome.reason)
-                    returnAfterTask(false)
+                    returnAfterTask(false, speakNow, origin)
                     setIdle("Остановлено")
                 }
                 is AgentOutcome.Failed -> {
                     addChat(ChatRole.ERROR, outcome.reason)
                     if (speakNow) say("Ошибка. " + outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: ошибка", outcome.reason)
-                    returnAfterTask(false)
+                    returnAfterTask(false, speakNow, origin)
                     setIdle("Ошибка")
                 }
             }
@@ -265,22 +270,45 @@ class AgentController(
     }
 
 
-    /** После задачи не оставляем агента в чужом приложении: возвращаемся на главный экран (или в RW AI) по настройке. */
-    private suspend fun returnAfterTask(needsAnswer: Boolean) {
+    /** После задачи не оставляем агента в чужом приложении: возвращаем владельца туда, откуда он дал команду (или по настройке). */
+    private suspend fun returnAfterTask(needsAnswer: Boolean, spoken: Boolean, origin: String?) {
         val svc = com.rwai.agent.accessibility.RwAccessibilityService.instance ?: return
-        val pkg = svc.currentPackage()
-        if (pkg == null || pkg == appContext.packageName) return
-        val mode = if (needsAnswer) "app" else settings.current.afterTask
+        val pm = appContext.packageManager
+        val launcher = try {
+            pm.resolveActivity(
+                android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),
+                android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+            )?.activityInfo?.packageName
+        } catch (_: Exception) { null }
+        val originLabel = origin?.let { p ->
+            try { pm.getApplicationLabel(pm.getApplicationInfo(p, 0)).toString() } catch (_: Exception) { null }
+        }
+        val action = com.rwai.agent.logic.ReturnPolicy.decide(
+            mode = settings.current.afterTask,
+            needsAnswer = needsAnswer,
+            spoken = spoken,
+            origin = origin,
+            current = svc.currentPackage(),
+            own = appContext.packageName,
+            launcher = launcher,
+            originIsBanking = origin != null && com.rwai.agent.logic.BankGuard.isBanking(origin, originLabel ?: ""),
+        )
+        if (action == com.rwai.agent.logic.ReturnAction.NONE) return
         delay(400)
-        when (mode) {
-            "home" -> svc.goHome()
-            "app" -> try {
-                svc.startActivity(
+        try {
+            when (action) {
+                com.rwai.agent.logic.ReturnAction.HOME -> svc.goHome()
+                com.rwai.agent.logic.ReturnAction.OWN_APP -> svc.startActivity(
                     android.content.Intent(appContext, com.rwai.agent.MainActivity::class.java)
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 )
-            } catch (_: Exception) { }
-        }
+                com.rwai.agent.logic.ReturnAction.ORIGIN_APP -> {
+                    val intent = origin?.let { pm.getLaunchIntentForPackage(it) }
+                    if (intent != null) svc.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) else svc.goHome()
+                }
+                else -> {}
+            }
+        } catch (_: Exception) { }
     }
 
     private fun setIdle(status: String) {

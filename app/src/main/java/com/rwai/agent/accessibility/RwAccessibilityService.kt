@@ -52,7 +52,10 @@ class RwAccessibilityService : AccessibilityService() {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString()
             // Системные панели (шторка, клавиатура) не считаем «текущим приложением»
-            if (pkg != null && pkg != "com.android.systemui" && !pkg.contains("inputmethod")) lastForegroundPackage = pkg
+            if (pkg != null && pkg != "com.android.systemui" && !pkg.contains("inputmethod")) {
+                lastForegroundPackage = pkg
+                if (pkg != packageName) lastExternalPackage = pkg
+            }
         }
     }
 
@@ -65,6 +68,12 @@ class RwAccessibilityService : AccessibilityService() {
         r.recycle()
         p
     } ?: lastForegroundPackage
+
+    /** Приложение, из которого владелец дал команду: текущее, а если сверху RW AI (панель/шторка) — последнее чужое. */
+    fun originPackage(): String? {
+        val cur = currentPackage()
+        return if (cur != null && cur != packageName) cur else lastExternalPackage
+    }
 
     fun capture(maxNodes: Int = MAX_NODES): ScreenCapture? {
         val root = rootInActiveWindow ?: return null
