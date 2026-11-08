@@ -274,7 +274,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (state.chat.isEmpty()) {
+            if (state.chat.isEmpty() && state.projectName == null) { // приветствие с логотипом и подсказки только на главной, в проекте их нет
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp), // место под строку «Чат заполнен на N %»
