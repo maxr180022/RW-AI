@@ -206,7 +206,7 @@ class AgentActionReceiver : BroadcastReceiver() {
             AgentNotifications.ACTION_QUICK -> {
                 val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(AgentNotifications.KEY_QUICK_TEXT)?.toString()?.trim().orEmpty()
                 if (text.isNotEmpty()) {
-                    Graph.controller.submit(text)
+                    Graph.controller.submit(text, speak = true)
                     AgentNotifications.showQuick(context, "Принято: " + text.take(60))
                 } else {
                     AgentNotifications.showQuick(context)

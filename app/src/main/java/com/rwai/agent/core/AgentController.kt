@@ -75,6 +75,9 @@ class AgentController(
     val state: StateFlow<AgentUiState> get() = _state
 
     private var job: Job? = null
+
+    /** Задача пришла голосом/из шторки: ответ нужно озвучить, не открывая приложение. */
+    @Volatile private var speakTask = false
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
     private var pendingQuestion: Pair<String, String>? = null
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -110,7 +113,7 @@ class AgentController(
     }
 
     @Synchronized
-    fun submit(raw: String, photos: List<AttachedImage> = emptyList()) {
+    fun submit(raw: String, photos: List<AttachedImage> = emptyList(), speak: Boolean = false) {
         rolloverIfNewDay()
         val text = raw.trim().ifEmpty { if (photos.isNotEmpty()) "Посмотри приложенные фото и кратко опиши, что на них важного." else "" }
         if (text.isEmpty()) return
@@ -125,6 +128,7 @@ class AgentController(
         val original = pendingQuestion?.first ?: text
         val command = pendingQuestion?.let { (orig, q) -> "Исходная задача: $orig\nТы спросил: $q\nОтвет владельца: $text" } ?: text
         pendingQuestion = null
+        speakTask = speak
         addChat(ChatRole.USER, text, photos.map { it.thumb })
         val taskId = System.currentTimeMillis()
         AgentService.start(appContext)
@@ -169,6 +173,8 @@ class AgentController(
 
     private suspend fun runTask(taskId: Long, command: String, original: String, images: List<String> = emptyList()) {
         val s = settings.current
+        val speakNow = speakTask
+        val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t), s.language) }
         val secrets = { listOfNotNull(settings.apiKey()) }
         val redact: (String) -> String = { SecretRedactor.redact(it, secrets()) }
         val sink = ActivitySink { e ->
@@ -195,7 +201,7 @@ class AgentController(
                     addChat(ChatRole.AGENT, (if (outcome.success) "" else "Не удалось полностью выполнить задачу.\n") + outcome.summary)
                     try { db.addMemory("task", null, null, command.take(200), outcome.summary) } catch (_: Exception) { }
                     appendCarry(original, redact(outcome.summary))
-                    if (s.speakResults) speaker.speak(outcome.summary.take(500), s.language)
+                    if (s.speakResults || speakNow) say(outcome.summary)
                     AgentNotifications.showResult(appContext, "RW AI: задача выполнена", outcome.summary)
                     returnAfterTask(false)
                     setIdle("Готов")
@@ -203,6 +209,7 @@ class AgentController(
                 is AgentOutcome.NeedsInput -> {
                     pendingQuestion = original to outcome.question
                     addChat(ChatRole.AGENT, outcome.question)
+                    if (speakNow) say(outcome.question)
                     AgentNotifications.showResult(appContext, "RW AI задаёт вопрос", outcome.question)
                     _state.update { it.copy(phase = Phase.WAITING_INPUT, status = "Жду ваш ответ", confirmation = null) }
                     returnAfterTask(true)
@@ -215,6 +222,7 @@ class AgentController(
                 }
                 is AgentOutcome.Failed -> {
                     addChat(ChatRole.ERROR, outcome.reason)
+                    if (speakNow) say("Ошибка. " + outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: ошибка", outcome.reason)
                     returnAfterTask(false)
                     setIdle("Ошибка")

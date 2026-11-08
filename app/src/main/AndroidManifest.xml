@@ -41,6 +41,20 @@
         android:theme="@style/Theme.RWAI"
         tools:targetApi="35">
 
+        <!-- Панель ассистента поверх экрана: жест вызова ассистента -->
+        <activity
+            android:name=".assistant.AssistantOverlayActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RWAI.Overlay"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -49,11 +63,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <!-- Жест вызова ассистента -->
-            <intent-filter>
-                <action android:name="android.intent.action.ASSIST" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- «Поделиться» фото из Галереи -->
             <intent-filter>
