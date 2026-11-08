@@ -163,8 +163,9 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
 
     val listState = rememberLazyListState()
     val extraItems = 3 // шаги, подтверждение, черновик
-    LaunchedEffect(state.chat.size, state.confirmation, state.steps.size, state.draft) {
-        listState.animateScrollToItem(state.chat.size + extraItems - 1)
+    LaunchedEffect(state.chat.size, state.confirmation, state.steps.size, state.draft, state.dialogId) {
+        // Пустой чат (приветствие с логотипом) всегда показываем сверху: прокрутка вниз обрезала логотип.
+        if (state.chat.isEmpty()) listState.scrollToItem(0) else listState.animateScrollToItem(state.chat.size + extraItems - 1)
     }
 
     val startListening: () -> Unit = {
@@ -270,13 +271,13 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
             if (state.chat.isEmpty()) {
                 item {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp), // место под строку «Чат заполнен на N %»
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Box(
-                                modifier = Modifier.size(210.dp).drawBehind {
+                                modifier = Modifier.size(192.dp).drawBehind {
                                     drawCircle(
                                         Brush.radialGradient(
                                             listOf(RwPalette.Violet.copy(alpha = 0.42f), RwPalette.Pink.copy(alpha = 0.16f), Color.Transparent),

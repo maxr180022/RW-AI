@@ -6,8 +6,10 @@ data class DigestItem(val title: String?, val body: String, val kind: DigestKind
     /** Для карточки человека: «taisiialook (Instagram, пересказ)» → ("taisiialook", "Instagram"). */
     fun person(): Pair<String, String?>? {
         val t = title ?: return null
+        if (kind != DigestKind.PERSON) return null
+        DigestView.appAndPerson(t)?.let { return it.first to it.second }
         val i = t.indexOf('(')
-        if (kind != DigestKind.PERSON || i <= 0) return null
+        if (i <= 0) return null
         val name = t.substring(0, i).trim()
         val app = t.substring(i + 1).substringBefore(')').substringBefore(',').trim().ifEmpty { null }
         return if (name.isEmpty()) null else name to app
@@ -27,8 +29,23 @@ object DigestView {
             "ждут ответа" in t || "ждет ответа" in t || "ожидают" in t -> DigestKind.WAITING
             "договор" in t -> DigestKind.DEAL
             '(' in t -> DigestKind.PERSON
+            appAndPerson(title) != null -> DigestKind.PERSON
             else -> DigestKind.NOTE
         }
+    }
+
+    private val messengers = setOf(
+        "instagram", "telegram", "whatsapp", "viber", "signal", "messenger", "facebook", "vk", "вк", "sms", "смс", "gmail", "почта", "mail", "outlook",
+    )
+
+    /** Заголовок вида «Instagram, taisiialook» — приложение и человек: (имя, приложение). Просто «Telegram» без имени — не человек. */
+    fun appAndPerson(title: String?): Pair<String, String>? {
+        val t = title ?: return null
+        val i = t.indexOf(',')
+        if (i <= 0) return null
+        val app = t.substring(0, i).trim()
+        val name = t.substring(i + 1).trim()
+        return if (name.isNotEmpty() && app.lowercase() in messengers) name to app else null
     }
 
     /** Карточки, на которые нужно ответить: срочное, «ждут ответа» и личные сообщения. Остальные (заметки, договорённости) — только информация. */
@@ -53,6 +70,21 @@ object DigestView {
                 else "Ответь по сообщению из «Входящих»: $ins"
             DigestKind.WAITING -> "По сообщениям, которые ждут ответа: $ins"
             DigestKind.URGENT -> "Разберись со срочным сообщением: $ins"
+            DigestKind.NOTE -> "По заметке из «Входящих»: $ins"
+            else -> null
+        }
+    }
+
+    /** Просьба «предложи, как ответить»: агент готовит черновик или варианты и ничего не отправляет. Видна в чате; текст карточки передаётся отдельно. */
+    fun suggestTask(item: DigestItem): String? {
+        val who = item.person()
+        return when (item.kind) {
+            DigestKind.PERSON ->
+                if (who != null) "Предложи, как ответить ${who.first}" + (who.second?.let { " в $it" } ?: "") + ": покажи черновик, не отправляй."
+                else "Предложи, как ответить на это сообщение: покажи черновик, не отправляй."
+            DigestKind.WAITING -> "Кому нужно ответить сейчас? Подготовь короткие ответы и покажи черновики, не отправляй."
+            DigestKind.URGENT -> "Помоги разобраться со срочным сообщением и предложи, что делать. Ничего не нажимай и не отправляй без моего подтверждения."
+            DigestKind.NOTE -> "Объясни, что это за заметка и что мне с ней сделать. Предложи варианты, ничего не отправляй."
             else -> null
         }
     }

@@ -119,7 +119,7 @@ private fun DigestCards(ts: Long?, text: String) {
     var answered by remember { mutableStateOf(AnsweredStore.raw()) }
     var composing by remember(text) { mutableStateOf<String?>(null) } // ключ карточки, у которой открыто поле «что сделать»
     var draft by remember(text) { mutableStateOf("") }
-    var hint by remember(text) { mutableStateOf<String?>(null) }
+    var hint by remember(text) { mutableStateOf<Pair<String, String>?>(null) } // (ключ карточки, текст подсказки)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "Сводка" + (ts?.let { " · " + dateFmt.format(Date(it)) } ?: ""),
@@ -150,13 +150,34 @@ private fun DigestCards(ts: Long?, text: String) {
                 val head = it0.title?.takeIf { t -> t.isNotBlank() && !t.equals(kindLabel, true) }
                 if (head != null) Text(head, style = MaterialTheme.typography.titleSmall)
                 if (it0.body.isNotBlank()) MdText(it0.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (done) 0.62f else 0.88f))
-                if (needs) {
-                    // Кнопка остаётся всегда, и после ответа: можно ответить ещё раз или вернуть карточку в «не отвечено».
+                val canReply = needs || it0.kind == DigestKind.NOTE
+                // Отправка агенту: mark — считать ли карточку отвеченной (просьба «предложи ответ» её не закрывает).
+                val send: (String?, Boolean) -> Unit = { task, mark ->
+                    when {
+                        task == null -> hint = key to "Напишите, что нужно сделать."
+                        !Graph.settings.hasApiKey.value -> hint = key to "Сначала введите API-ключ DeepSeek в настройках."
+                        Graph.controller.state.value.phase != Phase.IDLE -> hint = key to "Агент занят: дождитесь окончания задачи или нажмите «Стоп» на вкладке «Агент»."
+                        else -> {
+                            Graph.controller.submit(task, attach = DigestView.contextFor(it0))
+                            if (mark) answered = AnsweredStore.mark(key)
+                            composing = null
+                            draft = ""
+                            hint = null
+                            AgentPrefill.text.value = "" // переключает на вкладку «Агент», чтобы видеть работу
+                        }
+                    }
+                }
+                if (canReply) {
+                    // Кнопки остаются всегда, и после ответа: можно ответить ещё раз или вернуть карточку в «не отвечено».
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        ActionPill(if (it0.kind == DigestKind.URGENT) "Разобраться" else "Ответить", accent = !done) {
+                        ActionPill(
+                            when (it0.kind) { DigestKind.URGENT -> "Разобраться"; DigestKind.NOTE -> "Что сделать"; else -> "Ответить" },
+                            accent = needs && !done,
+                        ) {
                             composing = if (composing == key) null else key
                             hint = null
                         }
+                        ActionPill("Предложить ответ") { send(DigestView.suggestTask(it0), false) }
                         if (done) ActionPill("Не отвечено") { answered = AnsweredStore.unmark(key) }
                     }
                     if (composing == key) {
@@ -169,26 +190,11 @@ private fun DigestCards(ts: Long?, text: String) {
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ActionPill("Отправить", accent = true) {
-                                val task = DigestView.replyTask(it0, draft)
-                                when {
-                                    task == null -> hint = "Напишите, что нужно сделать."
-                                    !Graph.settings.hasApiKey.value -> hint = "Сначала введите API-ключ DeepSeek в настройках."
-                                    Graph.controller.state.value.phase != Phase.IDLE -> hint = "Агент занят: дождитесь окончания задачи или нажмите «Стоп» на вкладке «Агент»."
-                                    else -> {
-                                        Graph.controller.submit(task, attach = DigestView.contextFor(it0))
-                                        answered = AnsweredStore.mark(key)
-                                        composing = null
-                                        draft = ""
-                                        hint = null
-                                        AgentPrefill.text.value = "" // переключает на вкладку «Агент», чтобы видеть работу
-                                    }
-                                }
-                            }
+                            ActionPill("Отправить", accent = true) { send(DigestView.replyTask(it0, draft), needs) }
                             ActionPill("Отмена") { composing = null; hint = null }
                         }
-                        hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
+                    hint?.takeIf { it.first == key }?.let { Text(it.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else if (it0.kind == DigestKind.DEAL) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                         ActionPill("В календарь", accent = true) { AgentPrefill.text.value = "Добавь в календарь: ${it0.body.take(200)}" }

@@ -50,7 +50,37 @@ class InboxRepliesTest {
         val items = DigestView.parse(sample)
         assertNull(DigestView.replyTask(items.first { it.kind == DigestKind.URGENT }, "   "))
         assertNull(DigestView.replyTask(items.first { it.kind == DigestKind.DEAL }, "добавь"))
-        assertNull(DigestView.replyTask(items.first { it.kind == DigestKind.NOTE }, "добавь"))
+        assertEquals("По заметке из «Входящих»: пропусти", DigestView.replyTask(items.first { it.kind == DigestKind.NOTE }, "пропусти"))
+    }
+
+    @Test fun titleWithAppAndNameIsAPersonMessageNotAPlainNote() {
+        // Реальный случай: «Instagram, taisiialook» без скобок раньше считался заметкой, и ответить было нечем.
+        val items = DigestView.parse("- **Instagram, taisiialook:** упомянула вас в истории — ждёт реакции\n- **Telegram:** идёт отправка видео — просто статус")
+        val ig = items[0]
+        assertEquals(DigestKind.PERSON, ig.kind)
+        assertEquals("taisiialook" to "Instagram", ig.person())
+        assertTrue(DigestView.needsReply(ig.kind))
+        assertEquals("Ответь taisiialook в Instagram: поставь лайк", DigestView.replyTask(ig, "поставь лайк"))
+        // просто «Telegram» без имени — статус, а не человек
+        assertEquals(DigestKind.NOTE, items[1].kind)
+        assertNull(items[1].person())
+        assertNull(DigestView.appAndPerson("Telegram"))
+        assertNull(DigestView.appAndPerson("Что-то, чужое"))
+        assertEquals("Ира" to "WhatsApp", DigestView.appAndPerson("WhatsApp, Ира"))
+    }
+
+    @Test fun suggestReplyAsksForADraftAndNeverForSending() {
+        val ig = DigestView.parse("- **Instagram, taisiialook:** ждёт ответа").first()
+        val t = DigestView.suggestTask(ig)!!
+        assertTrue(t.contains("taisiialook") && t.contains("Instagram"))
+        assertTrue(t.contains("не отправляй"))
+        val urgent = DigestItem("Срочно", "пароль приложения", DigestKind.URGENT)
+        assertTrue(DigestView.suggestTask(urgent)!!.contains("без моего подтверждения"))
+        assertTrue(DigestView.suggestTask(DigestItem(null, "x", DigestKind.WAITING))!!.contains("не отправляй"))
+        assertTrue(DigestView.suggestTask(DigestItem(null, "x", DigestKind.NOTE)) != null)
+        assertNull(DigestView.suggestTask(DigestItem(null, "x", DigestKind.DEAL)))
+        // текст карточки в видимую команду не попадает
+        assertFalse(DigestView.suggestTask(DigestItem("Срочно", "СЕКРЕТНЫЙ-ТЕКСТ", DigestKind.URGENT))!!.contains("СЕКРЕТНЫЙ"))
     }
 
     @Test fun cardTextNeverLeaksIntoTheVisibleCommand() {
