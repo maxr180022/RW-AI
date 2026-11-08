@@ -87,7 +87,7 @@ fun PermissionsScreen(resumeTick: Int) {
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            "RW AI не получает права скрытно: каждое разрешение вы включаете сами в системных настройках Android и можете отозвать в любой момент.",
+            "Руся AI не получает права скрытно: каждое разрешение вы включаете сами в системных настройках Android и можете отозвать в любой момент.",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp),
         )
@@ -114,7 +114,7 @@ fun PermissionsScreen(resumeTick: Int) {
             onAction = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
         )
         PermissionCard(
-            title = "Показ уведомлений RW AI",
+            title = "Показ уведомлений Руся AI",
             enabled = post,
             why = "Нужен для запросов подтверждения и кнопки «Стоп», когда агент работает в другом приложении.",
             actionLabel = "Разрешить",
@@ -126,9 +126,9 @@ fun PermissionsScreen(resumeTick: Int) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val isAssistant = remember(resumeTick) { isDefaultAssistant(ctx) }
                 Text("Ассистент по умолчанию" + if (isAssistant) " ✅" else "", style = MaterialTheme.typography.titleSmall)
-                if (isAssistant) Text("RW AI уже выбран ассистентом: долгое нажатие кнопки вызова открывает его панель.", style = MaterialTheme.typography.bodySmall)
+                if (isAssistant) Text("Руся AI уже выбран ассистентом: долгое нажатие кнопки вызова открывает его панель.", style = MaterialTheme.typography.bodySmall)
                 else Text(
-                    "Чтобы долгое нажатие кнопки «Домой» или боковой кнопки открывало RW AI вместо Google: нажмите кнопку ниже и выберите RW AI в пункте «Цифровой помощник». " +
+                    "Чтобы долгое нажатие кнопки «Домой» или боковой кнопки открывало Руся AI вместо Google: нажмите кнопку ниже и выберите Руся AI в пункте «Цифровой помощник». " +
                         "На Samsung также проверьте: Настройки → Дополнительные функции → Боковая кнопка → Нажатие и удержание → «Открыть цифровой помощник».",
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -147,7 +147,7 @@ fun PermissionsScreen(resumeTick: Int) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("🔒 Банки закрыты для агента", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "RW AI не открывает банковские и платёжные приложения и сайты, не читает их экран и не сохраняет их уведомления. Это правило нельзя отключить.",
+                    "Руся AI не открывает банковские и платёжные приложения и сайты, не читает их экран и не сохраняет их уведомления. Это правило нельзя отключить.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -155,7 +155,7 @@ fun PermissionsScreen(resumeTick: Int) {
         Card {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Экономия заряда (по желанию)", style = MaterialTheme.typography.titleSmall)
-                Text("Если Samsung «усыпляет» RW AI и уведомления перестают сохраняться: Настройки → Приложения → RW AI → Батарея → «Без ограничений».", style = MaterialTheme.typography.bodySmall)
+                Text("Если Samsung «усыпляет» Руся AI и уведомления перестают сохраняться: Настройки → Приложения → Руся AI → Батарея → «Без ограничений».", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }) {
                     Text("Открыть настройки батареи")
                 }
@@ -265,7 +265,7 @@ fun SettingsScreen() {
 
         SwitchRow(
             "Быстрая команда в шторке",
-            "Постоянное уведомление с полем «Написать RW AI»: команду можно ввести, не открывая приложение. Работает только на разблокированном телефоне.",
+            "Постоянное уведомление с полем «Написать Руся AI»: команду можно ввести, не открывая приложение. Работает только на разблокированном телефоне.",
             settings.quickReply,
         ) { v ->
             Graph.settings.update { it.copy(quickReply = v) }
@@ -299,11 +299,11 @@ fun SettingsScreen() {
 
         SectionTitle("После выполнения задачи")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            listOf("origin" to "Туда, откуда вызвал", "home" to "На главный экран", "app" to "В RW AI", "stay" to "Остаться").forEach { (v, label) ->
+            listOf("origin" to "Туда, откуда вызвал", "home" to "На главный экран", "app" to "В Руся AI", "stay" to "Остаться").forEach { (v, label) ->
                 FilterChip(selected = settings.afterTask == v, onClick = { Graph.settings.update { it.copy(afterTask = v) } }, label = { Text(label) })
             }
         }
-        Text("Если агент задаёт вопрос текстом, RW AI открывается. Если вы говорили голосом, вопрос озвучивается без открытия приложения.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Если агент задаёт вопрос текстом, Руся AI открывается. Если вы говорили голосом, вопрос озвучивается без открытия приложения.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         SectionTitle("Язык и голос")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -317,7 +317,7 @@ fun SettingsScreen() {
         }
 
         SectionTitle("Уведомления и приватность")
-        SwitchRow("Сохранять уведомления", "Для «Входящих» и поиска. Выключите, чтобы RW AI ничего не записывал.", settings.captureNotifications) { v ->
+        SwitchRow("Сохранять уведомления", "Для «Входящих» и поиска. Выключите, чтобы Руся AI ничего не записывал.", settings.captureNotifications) { v ->
             Graph.settings.update { it.copy(captureNotifications = v) }
         }
         SwitchRow("Маскировать коды и пароли в уведомлениях", "Одноразовые коды из SMS/мессенджеров заменяются на ••••.", settings.maskCodes) { v ->
@@ -364,8 +364,8 @@ fun SettingsScreen() {
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные RW AI (память, уведомления, журнал)") }
-        Text("RW AI 0.2.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
+        OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные Руся AI (память, уведомления, журнал)") }
+        Text("Руся AI 0.3.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
     }
 
     if (confirmDeleteKey) {

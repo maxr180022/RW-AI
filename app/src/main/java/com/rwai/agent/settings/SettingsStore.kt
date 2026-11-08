@@ -25,9 +25,9 @@ data class Settings(
     val maskCodes: Boolean = true,
     val excludedApps: String = "",
     val dailyTokenCap: Int = 0,
-    /** Постоянное уведомление с полем «Написать RW AI» в шторке. */
+    /** Постоянное уведомление с полем «Написать Руся AI» в шторке. */
     val quickReply: Boolean = true,
-    /** Что делать после задачи: home — на главный экран, app — в RW AI, stay — остаться где есть. */
+    /** Что делать после задачи: home — на главный экран, app — в Руся AI, stay — остаться где есть. */
     val afterTask: String = "origin",
     /** Голосовой вызов «Окей, <имя>» без нажатия кнопки. */
     val wakeEnabled: Boolean = false,
@@ -41,6 +41,8 @@ data class Settings(
     val autoTranslate: Boolean = true,
     /** Адрес моста к Claude Code на компьютере владельца (токен — в SecretStore). */
     val bridgeUrl: String = "",
+    /** Имя выбранного голоса синтезатора; пусто — автоматически (мужской, если есть). */
+    val voiceName: String = "",
 ) {
     val languageName: String
         get() = when (language.substringBefore('-')) {
@@ -97,6 +99,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             digestGapHours = prefs.getInt("digestGapHours", d.digestGapHours).coerceIn(1, 48),
             autoTranslate = prefs.getBoolean("autoTranslate", d.autoTranslate),
             bridgeUrl = prefs.getString("bridgeUrl", d.bridgeUrl) ?: d.bridgeUrl,
+            voiceName = prefs.getString("voiceName", d.voiceName) ?: d.voiceName,
         )
     }
 
@@ -111,7 +114,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply).putString("afterTaskMode", s.afterTask)
             .putBoolean("wakeEnabled", s.wakeEnabled).putString("wakeMode", s.wakeMode).putString("wakeName", s.wakeName)
             .putBoolean("digestEnabled", s.digestEnabled).putInt("digestGapHours", s.digestGapHours)
-            .putBoolean("autoTranslate", s.autoTranslate).putString("bridgeUrl", s.bridgeUrl)
+            .putBoolean("autoTranslate", s.autoTranslate).putString("bridgeUrl", s.bridgeUrl).putString("voiceName", s.voiceName)
             .apply()
         _state.value = s
     }

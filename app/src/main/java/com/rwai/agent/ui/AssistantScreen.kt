@@ -358,29 +358,31 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
         }
         photoNote?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
 
+        Column(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
+                shape = RoundedCornerShape(26.dp),
+                placeholder = { Text(if (listening) "Слушаю… говорите" else if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
+                maxLines = 5,
+            )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilledTonalIconButton(
                 onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(44.dp),
                 enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
-            ) { Text("📎", fontSize = 22.sp) }
+            ) { Text("📎", fontSize = 18.sp) }
             FilledTonalIconButton(
                 onClick = { takePhoto() },
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(44.dp),
                 enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
-            ) { Text("📷", fontSize = 22.sp) }
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(26.dp),
-                placeholder = { Text(if (listening) "Слушаю… говорите" else if (state.phase == Phase.WAITING_INPUT) "Ваш ответ…" else "Команда агенту…") },
-                maxLines = 4,
-            )
+            ) { Text("📷", fontSize = 18.sp) }
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
             val pulse by animateFloatAsState(if (listening) 1f + level * 0.9f else 1f, label = "micPulse")
             val breath by rememberInfiniteTransition(label = "micBreath").animateFloat(
                 initialValue = 1f,
@@ -388,7 +390,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                 animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
                 label = "micBreathValue",
             )
-            Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                 if (listening) {
                     Box(
                         modifier = Modifier
@@ -415,10 +417,10 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                             micPermission.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(44.dp),
                     colors = if (listening) IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
                     else IconButtonDefaults.filledTonalIconButtonColors(),
-                ) { Text(if (listening) "⏹" else "🎤", fontSize = 22.sp) }
+                ) { Text(if (listening) "⏹" else "🎤", fontSize = 18.sp) }
             }
             FilledIconButton(
                 enabled = (input.isNotBlank() || photos.isNotEmpty()) && state.phase != Phase.RUNNING && state.phase != Phase.WAITING_CONFIRMATION,
@@ -429,8 +431,9 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                     photos = emptyList()
                     photoNote = null
                 },
-                modifier = Modifier.size(52.dp),
-            ) { Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+                modifier = Modifier.size(44.dp),
+            ) { Text("↑", fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+        }
         }
     }
 }
@@ -441,7 +444,7 @@ private fun ChatBubble(entry: ChatEntry) {
     val isUser = entry.role == ChatRole.USER
     val (bg, fg, label) = when (entry.role) {
         ChatRole.USER -> Triple(scheme.primary, scheme.onPrimary, "Вы")
-        ChatRole.AGENT -> Triple(scheme.surface, scheme.onSurface, "RW AI")
+        ChatRole.AGENT -> Triple(scheme.surface, scheme.onSurface, "Руся AI")
         ChatRole.SYSTEM -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, "Система")
         ChatRole.ERROR -> Triple(scheme.errorContainer, scheme.onErrorContainer, "Ошибка")
     }

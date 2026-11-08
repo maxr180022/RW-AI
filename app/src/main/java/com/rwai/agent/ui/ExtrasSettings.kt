@@ -1,5 +1,6 @@
 package com.rwai.agent.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,34 @@ fun ExtrasSettings() {
     val settings by Graph.settings.state.collectAsState()
     val secrets = Graph.secretStore
 
+    SectionTitle("Голос агента")
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var voices by remember { mutableStateOf(Graph.speaker.voices(settings.language)) }
+    Text(
+        "Голос берётся из синтезатора речи телефона. Выберите понравившийся (нажатие — прослушать). Более живые голоса можно скачать в настройках синтеза речи (Google).",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { voices = Graph.speaker.voices(settings.language) }) { Text("Обновить список") }
+        OutlinedButton(onClick = {
+            try {
+                ctx.startActivity(android.content.Intent("com.android.settings.TTS_SETTINGS").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                try { ctx.startActivity(android.content.Intent(android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
+            }
+        }) { Text("Скачать голоса") }
+    }
+    if (voices.isEmpty()) Text("Нет установленных голосов для этого языка. Нажмите «Скачать голоса».", style = MaterialTheme.typography.bodyMedium)
+    Row(modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(selected = settings.voiceName.isBlank(), onClick = { Graph.settings.update { it.copy(voiceName = "") } }, label = { Text("Авто") })
+        voices.forEach { v ->
+            FilterChip(selected = settings.voiceName == v.name, onClick = {
+                Graph.settings.update { it.copy(voiceName = v.name) }
+                Graph.speaker.speak("Привет! Я Руся, твой агент.", settings.language)
+            }, label = { Text(v.label) })
+        }
+    }
+
     SectionTitle("Сводка и перевод сообщений")
     SwitchRow(
         "Сводка «кому ответить»",
@@ -49,7 +78,7 @@ fun ExtrasSettings() {
         settings.autoTranslate,
     ) { v -> Graph.settings.update { it.copy(autoTranslate = v) } }
     Text(
-        "Голосовые сообщения в уведомлении приходят без текста, поэтому RW AI их не расшифровывает. В WhatsApp включите «Расшифровка голосовых сообщений» (Настройки → Чаты) — тогда текст появится сам.",
+        "Голосовые сообщения в уведомлении приходят без текста, поэтому Руся AI их не расшифровывает. В WhatsApp включите «Расшифровка голосовых сообщений» (Настройки → Чаты) — тогда текст появится сам.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 

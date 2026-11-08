@@ -14,6 +14,8 @@ import argparse
 import hmac
 import json
 import os
+import secrets
+import socket
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -81,6 +83,38 @@ def make_handler(token: str, cmd: str, cwd: str | None, allow_edits: bool, timeo
     return Handler
 
 
+def local_ip() -> str:
+    """Адрес компьютера в локальной сети (без отправки данных в интернет)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def load_or_create_token() -> str:
+    """Токен из RW_BRIDGE_TOKEN, иначе из файла рядом со скриптом (создаётся при первом запуске)."""
+    t = os.environ.get("RW_BRIDGE_TOKEN", "")
+    if t:
+        return t
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".rw_bridge_token")
+    if os.path.exists(path):
+        t = open(path, encoding="utf-8").read().strip()
+        if len(t) >= 16:
+            return t
+    t = secrets.token_urlsafe(24)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(t)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return t
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Мост RW AI -> Claude Code")
     ap.add_argument("--host", default="127.0.0.1")
@@ -89,12 +123,20 @@ def main() -> None:
     ap.add_argument("--allow-edits", action="store_true", help="разрешить Claude Code править файлы (по умолчанию только чтение)")
     ap.add_argument("--timeout", type=int, default=280)
     a = ap.parse_args()
-    token = os.environ.get("RW_BRIDGE_TOKEN", "")
+    token = load_or_create_token()
     if len(token) < 16:
-        sys.exit("Задайте переменную окружения RW_BRIDGE_TOKEN (не короче 16 символов).")
+        sys.exit("Токен RW_BRIDGE_TOKEN слишком короткий (нужно не менее 16 символов).")
     cmd = os.environ.get("RW_CLAUDE_CMD", "claude")
     srv = ThreadingHTTPServer((a.host, a.port), make_handler(token, cmd, a.cwd, a.allow_edits, a.timeout))
-    print(f"RW Bridge: http://{a.host}:{a.port}  (правки файлов: {'разрешены' if a.allow_edits else 'запрещены'})", flush=True)
+    shown = local_ip() if a.host in ("0.0.0.0", "") else a.host
+    print("=" * 60)
+    print("Мост запущен. Впишите это в приложении Руся AI")
+    print("(Настройки → Дополнительно → Мост к Claude Code):")
+    print(f"  Адрес:  http://{shown}:{a.port}")
+    print(f"  Токен:  {token}")
+    print(f"  Правки файлов Claude Code: {'разрешены' if a.allow_edits else 'запрещены (режим чтения)'}")
+    print("Окно не закрывайте, пока мост нужен. Остановка: Ctrl+C.")
+    print("=" * 60, flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

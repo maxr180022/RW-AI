@@ -110,7 +110,7 @@ fun InboxScreen(resumeTick: Int) {
                     }
                 }
                 Text(
-                    "Показано ${rows.size} уведомлений. Приложения скрывают часть содержимого — RW AI показывает только то, что отдала система.",
+                    "Показано ${rows.size} уведомлений. Приложения скрывают часть содержимого — Руся AI показывает только то, что отдала система.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -180,7 +180,7 @@ fun MemoryScreen() {
             OutlinedButton(enabled = total > 0, onClick = { confirmClear = true }) { Text("Очистить память") }
         }
         if (submitted.isNotBlank() && results.isEmpty()) {
-            Text("Ничего не найдено. Память содержит только то, что RW AI реально получил (уведомления и сохранённые выдержки).", style = MaterialTheme.typography.bodyMedium)
+            Text("Ничего не найдено. Память содержит только то, что Руся AI реально получил (уведомления и сохранённые выдержки).", style = MaterialTheme.typography.bodyMedium)
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(results) { m ->

@@ -111,7 +111,7 @@
         <service
             android:name=".assistant.RwRecognitionService"
             android:exported="true"
-            android:label="RW AI (без распознавания)">
+            android:label="Руся AI (без распознавания)">
             <intent-filter>
                 <action android:name="android.speech.RecognitionService" />
                 <category android:name="android.intent.category.DEFAULT" />

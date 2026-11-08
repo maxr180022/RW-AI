@@ -15,6 +15,7 @@ import java.util.Locale
 /** Push-to-talk распознавание речи. Все вызовы — из главного потока. Требует разрешение RECORD_AUDIO. */
 class VoiceInput(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
@@ -28,6 +29,16 @@ class VoiceInput(private val context: Context) {
         onFail: (String) -> Unit,
         onListening: () -> Unit = {},
         onLevel: (Float) -> Unit = {},
+    ) = begin(languageTag, onPartial, onResult, onFail, onListening, onLevel, attempt = 0)
+
+    private fun begin(
+        languageTag: String,
+        onPartial: (String) -> Unit,
+        onResult: (String, Float?) -> Unit,
+        onFail: (String) -> Unit,
+        onListening: () -> Unit,
+        onLevel: (Float) -> Unit,
+        attempt: Int,
     ) {
         stop()
         if (!isAvailable()) {
@@ -56,20 +67,26 @@ class VoiceInput(private val context: Context) {
             }
 
             override fun onError(error: Int) {
-                onFail(describe(error))
+                // Код 11 (служба Google отключилась), занято, клиентская ошибка, язык недоступен офлайн:
+                // пересоздаём распознаватель и пробуем ещё раз, уже без требования «офлайн».
+                val retryable = error == 11 || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == 12 || error == 13
+                if (retryable && attempt < 2) {
+                    stop()
+                    main.postDelayed({ begin(languageTag, onPartial, onResult, onFail, onListening, onLevel, attempt + 1) }, 400L + 400L * attempt)
+                } else onFail(describe(error))
             }
         })
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // по возможности распознавать речь на телефоне, без отправки в облако
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, attempt == 0) // по возможности распознавать речь на телефоне, без отправки в облако
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
         r.startListening(intent)
     }
 
-    /** Выбирает настоящую службу распознавания (Google, затем любая другая), но не заглушку самого RW AI. */
+    /** Выбирает настоящую службу распознавания (Google, затем любая другая), но не заглушку самого Руся AI. */
     private fun createRecognizer(): SpeechRecognizer {
         val services = context.packageManager.queryIntentServices(Intent(android.speech.RecognitionService.SERVICE_INTERFACE), 0)
             .map { it.serviceInfo }
@@ -83,6 +100,7 @@ class VoiceInput(private val context: Context) {
     }
 
     fun stop() {
+        main.removeCallbacksAndMessages(null)
         recognizer?.let {
             try { it.cancel(); it.destroy() } catch (_: Exception) { }
         }
@@ -98,6 +116,8 @@ class VoiceInput(private val context: Context) {
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Распознаватель занят, повторите."
         SpeechRecognizer.ERROR_SERVER -> "Ошибка сервера распознавания."
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Вы ничего не сказали."
+        11 -> "Служба распознавания речи отключилась. Нажмите на шар и повторите."
+        12, 13 -> "Этот язык недоступен для распознавания. Проверьте язык в настройках."
         else -> "Ошибка распознавания ($code)."
     }
 }
@@ -145,9 +165,32 @@ class Speaker(context: Context) {
         return t.speak(text.take(3000), TextToSpeech.QUEUE_FLUSH, null, "rwai-" + System.nanoTime()) == TextToSpeech.SUCCESS
     }
 
-    /** Руся — мужского рода: по возможности выбираем мужской голос (определяется по имени голоса; если такого нет — остаётся системный). */
+    data class VoiceOption(val name: String, val label: String, val likelyMale: Boolean, val needsNetwork: Boolean)
+
+    private fun looksMale(n: String) = n.contains("-rud-") || n.contains("smtm") || (n.contains("male") && !n.contains("female"))
+
+    /** Установленные голоса выбранного языка (для выбора в настройках). */
+    fun voices(languageTag: String): List<VoiceOption> {
+        val t = tts ?: return emptyList()
+        if (!ready) return emptyList()
+        val lang = Locale.forLanguageTag(languageTag).language
+        return try {
+            t.voices.orEmpty().filter { v ->
+                v.locale.language == lang && !v.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+            }.sortedBy { it.name }.mapIndexed { i, v ->
+                VoiceOption(v.name, "Голос ${i + 1}" + (if (looksMale(v.name.lowercase())) " (мужской)" else "") + (if (v.isNetworkConnectionRequired) " · онлайн" else ""),
+                    looksMale(v.name.lowercase()), v.isNetworkConnectionRequired)
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /** Руся — мужского рода: берём голос, выбранный владельцем, иначе по возможности мужской (определяется по имени голоса). */
     private fun preferMaleVoice(t: TextToSpeech) {
         try {
+            val chosen = com.rwai.agent.Graph.settings.current.voiceName
+            if (chosen.isNotBlank()) {
+                t.voices.orEmpty().firstOrNull { it.name == chosen }?.let { t.voice = it; return }
+            }
             val lang = t.voice?.locale?.language ?: return
             val male = t.voices.orEmpty().filter { v ->
                 val n = v.name.lowercase()

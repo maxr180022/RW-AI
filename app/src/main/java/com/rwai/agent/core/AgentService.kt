@@ -98,7 +98,7 @@ object AgentNotifications {
 
     fun running(context: Context): Notification = NotificationCompat.Builder(context, CH_RUNNING)
         .setSmallIcon(android.R.drawable.ic_popup_sync)
-        .setContentTitle("RW AI выполняет задачу")
+        .setContentTitle("Руся AI выполняет задачу")
         .setContentText("Агент работает по вашей команде. Нажмите «Стоп», чтобы прервать.")
         .setOngoing(true)
         .setOnlyAlertOnce(true)
@@ -155,12 +155,12 @@ object AgentNotifications {
      */
     fun showQuick(context: Context, status: String? = null) {
         ensureChannels(context)
-        val remoteInput = RemoteInput.Builder(KEY_QUICK_TEXT).setLabel("Команда для RW AI…").build()
+        val remoteInput = RemoteInput.Builder(KEY_QUICK_TEXT).setLabel("Команда для Руси AI…").build()
         val replyIntent = PendingIntent.getBroadcast(
             context, 4, Intent(context, AgentActionReceiver::class.java).setAction(ACTION_QUICK),
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val action = NotificationCompat.Action.Builder(0, "Написать RW AI", replyIntent)
+        val action = NotificationCompat.Action.Builder(0, "Написать Руси AI", replyIntent)
             .addRemoteInput(remoteInput)
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
             .setShowsUserInterface(false)
@@ -168,8 +168,8 @@ object AgentNotifications {
             .build()
         val n = NotificationCompat.Builder(context, CH_QUICK)
             .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .setContentTitle("RW AI")
-            .setContentText(status ?: "Нажмите «Написать RW AI» и введите команду")
+            .setContentTitle("Руся AI")
+            .setContentText(status ?: "Нажмите «Написать Руси AI» и введите команду")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)

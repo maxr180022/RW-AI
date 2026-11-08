@@ -61,7 +61,7 @@ fun isAccessibilityEnabled(ctx: Context): Boolean {
     }
 }
 
-/** RW AI выбран цифровым помощником по умолчанию (роль «Помощник» или выбранная служба голосового взаимодействия). */
+/** Руся AI выбран цифровым помощником по умолчанию (роль «Помощник» или выбранная служба голосового взаимодействия). */
 fun isDefaultAssistant(ctx: Context): Boolean {
     try {
         if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -154,7 +154,7 @@ private fun AppHeader(title: String) {
     ) {
         BrandMark(36.dp)
         Column {
-            Text("RW AI", style = MaterialTheme.typography.titleMedium)
+            Text("Руся AI", style = MaterialTheme.typography.titleMedium)
             Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -169,7 +169,7 @@ fun BrandMark(size: Dp) {
     ) {
         Image(
             painter = painterResource(R.drawable.rw_logo),
-            contentDescription = "RW AI",
+            contentDescription = "Руся AI",
             modifier = Modifier.size(size),
         )
     }

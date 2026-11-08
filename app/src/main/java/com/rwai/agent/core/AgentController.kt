@@ -211,7 +211,7 @@ class AgentController(
                     try { db.addMemory("task", null, null, command.take(200), outcome.summary) } catch (_: Exception) { }
                     appendCarry(original, redact(outcome.summary))
                     if (s.speakResults || speakNow) say(outcome.summary)
-                    AgentNotifications.showResult(appContext, "RW AI: задача выполнена", outcome.summary)
+                    AgentNotifications.showResult(appContext, "Руся AI: задача выполнена", outcome.summary)
                     returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Готов")
                 }
@@ -219,20 +219,20 @@ class AgentController(
                     pendingQuestion = original to outcome.question
                     addChat(ChatRole.AGENT, outcome.question)
                     if (speakNow) say(outcome.question)
-                    AgentNotifications.showResult(appContext, "RW AI задаёт вопрос", outcome.question)
+                    AgentNotifications.showResult(appContext, "Руся AI задаёт вопрос", outcome.question)
                     _state.update { it.copy(phase = Phase.WAITING_INPUT, status = "Жду ваш ответ", confirmation = null) }
                     returnAfterTask(true, speakNow, origin, movedApps)
                 }
                 is AgentOutcome.Stopped -> {
                     addChat(ChatRole.SYSTEM, outcome.reason)
-                    AgentNotifications.showResult(appContext, "RW AI: задача остановлена", outcome.reason)
+                    AgentNotifications.showResult(appContext, "Руся AI: задача остановлена", outcome.reason)
                     returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Остановлено")
                 }
                 is AgentOutcome.Failed -> {
                     addChat(ChatRole.ERROR, outcome.reason)
                     if (speakNow) say("Ошибка. " + outcome.reason)
-                    AgentNotifications.showResult(appContext, "RW AI: ошибка", outcome.reason)
+                    AgentNotifications.showResult(appContext, "Руся AI: ошибка", outcome.reason)
                     returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Ошибка")
                 }

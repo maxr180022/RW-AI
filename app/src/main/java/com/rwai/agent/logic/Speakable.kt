@@ -8,11 +8,12 @@ object Speakable {
     private val spaces = Regex("\\s+")
 
     private val brand = Regex("(?<![\\p{L}\\p{N}])RW[\\s-]?(AI|Agent|Агент)(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
+    private val ai = Regex("(?<![\\p{L}\\p{N}])AI(?![\\p{L}\\p{N}])")
     private val rw = Regex("(?<![\\p{L}\\p{N}])RW(?![\\p{L}\\p{N}])")
 
     /** [russian]: русскому синтезатору имя читаем по буквам — «Эр Вэ Агент». */
     fun clean(text: String, maxChars: Int = 700, russian: Boolean = true): String {
-        val named = if (russian) text.replace(brand, "Эр Вэ Агент").replace(rw, "Эр Вэ") else text
+        val named = if (russian) text.replace(brand, "Эр Вэ Агент").replace(rw, "Эр Вэ").replace(ai, "Эй Ай") else text
         val t = named.replace(url, "ссылка").replace(bullet, "").replace(markup, "").replace(spaces, " ").trim()
         if (t.length <= maxChars) return t
         val cut = t.take(maxChars)

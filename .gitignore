@@ -12,3 +12,4 @@
 *.keystore
 keystore.properties
 dist/
+bridge/.rw_bridge_token

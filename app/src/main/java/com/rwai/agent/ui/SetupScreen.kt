@@ -88,7 +88,7 @@ fun SetupScreen(resumeTick: Int, onBegin: () -> Unit, onFinish: () -> Unit) {
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     BrandMark(52.dp)
-                    Text("RW AI", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Руся AI", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
                         if (connected) "Готово! Осталось включить доступ к экрану." else "Ваш личный ИИ-оператор смартфона. Подключим его за минуту.",
                         color = Color.White.copy(alpha = 0.92f),
@@ -101,7 +101,7 @@ fun SetupScreen(resumeTick: Int, onBegin: () -> Unit, onFinish: () -> Unit) {
                 if (!connected) {
                     StepCard(number = "1", title = "Получите ключ DeepSeek") {
                         Text(
-                            "Ключ — это как пароль, по которому RW AI обращается к нейросети DeepSeek. Его создают один раз в вашем аккаунте DeepSeek.",
+                            "Ключ — это как пароль, по которому Руся AI обращается к нейросети DeepSeek. Его создают один раз в вашем аккаунте DeepSeek.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text("Что сделать:", style = MaterialTheme.typography.labelLarge)
@@ -194,7 +194,7 @@ fun SetupScreen(resumeTick: Int, onBegin: () -> Unit, onFinish: () -> Unit) {
                             }
                         }
                     }
-                    Text("Теперь дайте RW AI доступ", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
+                    Text("Теперь дайте Руся AI доступ", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
                     Text(
                         "Каждое разрешение вы включаете сами в настройках Android и можете отозвать в любой момент. Без доступа к экрану агент сможет только отвечать и читать уведомления.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -285,9 +285,9 @@ fun AccessibilityHelpDialog(onDismiss: () -> Unit) {
         title = { Text("Включение управления экраном") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Что сможет RW AI: видеть текст и кнопки на экране, нажимать их, прокручивать, вводить текст, нажимать «Назад» — только во время вашей задачи.")
+                Text("Что сможет Руся AI: видеть текст и кнопки на экране, нажимать их, прокручивать, вводить текст, нажимать «Назад» — только во время вашей задачи.")
                 Text("Чего не будет: чтения паролей, обхода блокировки экрана, биометрии и CAPTCHA, скрытой слежки. Отправка, оплата и удаление — только с вашего подтверждения.")
-                Text("Если Android пишет «Ограниченная настройка»: нажмите «Параметры приложения», затем ⋮ (три точки справа сверху) → «Разрешить ограниченные настройки», вернитесь и включите службу RW AI в списке «Установленные приложения».")
+                Text("Если Android пишет «Ограниченная настройка»: нажмите «Параметры приложения», затем ⋮ (три точки справа сверху) → «Разрешить ограниченные настройки», вернитесь и включите службу Руся AI в списке «Установленные приложения».")
             }
         },
         confirmButton = {

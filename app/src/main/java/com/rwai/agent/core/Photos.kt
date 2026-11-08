@@ -15,7 +15,7 @@ import java.io.ByteArrayOutputStream
 /** Фото, подготовленное к отправке модели: сжатая JPEG-копия в виде data-URL и маленькая миниатюра для чата. */
 class AttachedImage(val dataUrl: String, val thumb: Bitmap)
 
-/** Фото, которыми владелец поделился из Галереи («Поделиться → RW AI»); экран ассистента забирает их и очищает список. */
+/** Фото, которыми владелец поделился из Галереи («Поделиться → Руся AI»); экран ассистента забирает их и очищает список. */
 object IncomingShare {
     val uris = MutableStateFlow<List<Uri>>(emptyList())
 }

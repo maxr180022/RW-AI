@@ -52,6 +52,7 @@ class AndroidToolExecutor(
         "web_search" -> webSearch(call.str("query").orEmpty())
         "fetch_page" -> fetchPage(call.str("url").orEmpty())
         "ask_claude_code" -> askClaudeCode(call.str("task").orEmpty())
+        "phone_status" -> phoneStatus()
         "inspect_screen" -> withScreen { cap -> ToolResult.ok(UiFormatter.format(cap.packageName, cap.infos), untrusted = true) }
         "find_text" -> findText(call.str("query").orEmpty())
         "tap_text" -> tapText(call.str("text").orEmpty(), call.int("index") ?: 0)
@@ -126,10 +127,10 @@ class AndroidToolExecutor(
     private fun isLocked(): Boolean =
         (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
 
-    private fun lockedResult() = ToolResult.failed("Телефон заблокирован. Разблокируйте его сами — RW AI не обходит блокировку экрана.")
+    private fun lockedResult() = ToolResult.failed("Телефон заблокирован. Разблокируйте его сами — Руся AI не обходит блокировку экрана.")
 
     private fun noService() = ToolResult.unavailable(
-        "Служба специальных возможностей RW AI не включена. Владельцу нужно включить её: Настройки Android → Специальные возможности → RW AI.",
+        "Служба специальных возможностей Руся AI не включена. Владельцу нужно включить её: Настройки Android → Специальные возможности → Руся AI.",
     )
 
     private inline fun withScreen(block: (com.rwai.agent.accessibility.ScreenCapture) -> ToolResult): ToolResult {
@@ -137,7 +138,7 @@ class AndroidToolExecutor(
         val svc = RwAccessibilityService.instance ?: return noService()
         val cap = svc.capture() ?: return ToolResult.failed("Нет активного окна: экран пуст или приложение защитило содержимое.")
         try {
-            if (cap.packageName == context.packageName) return ToolResult.failed("Агент не работает с экраном самого RW AI.")
+            if (cap.packageName == context.packageName) return ToolResult.failed("Агент не работает с экраном самого Руся AI.")
             if (BankGuard.isBanking(cap.packageName, cap.packageName?.let { labelOf(it) })) return ToolResult.failed(BankGuard.REFUSAL)
             return block(cap)
         } finally {
@@ -198,6 +199,53 @@ class AndroidToolExecutor(
         } catch (e: java.io.IOException) {
             ToolResult.failed("Нет доступа к интернету или поисковик не отвечает.")
         }
+    }
+
+    /** Состояние телефона из системных API: без интерфейса, без открытия приложений. */
+    private fun phoneStatus(): ToolResult = try {
+        val i = context.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = (i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100).coerceAtLeast(1)
+        val pct = if (level < 0) null else level * 100 / scale
+        val temp = (i?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
+        val plugged = i?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val status = i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val health = i?.getIntExtra(android.os.BatteryManager.EXTRA_HEALTH, -1) ?: -1
+        val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING || status == android.os.BatteryManager.BATTERY_STATUS_FULL || plugged != 0
+        val src = when { plugged and 4 != 0 -> "беспроводная"; plugged and 2 != 0 -> "USB"; plugged and 1 != 0 -> "сеть"; else -> "" }
+        val thermal = if (android.os.Build.VERSION.SDK_INT >= 29)
+            (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).currentThermalStatus else 0
+        val thermalText = when (thermal) { 0 -> "норма"; 1 -> "слегка тёплый"; 2 -> "тёплый"; 3 -> "перегрев"; 4 -> "сильный перегрев"; else -> "критический" }
+        val healthText = when (health) {
+            android.os.BatteryManager.BATTERY_HEALTH_GOOD -> "хорошее"; android.os.BatteryManager.BATTERY_HEALTH_OVERHEAT -> "перегрев"
+            android.os.BatteryManager.BATTERY_HEALTH_COLD -> "холодная"; android.os.BatteryManager.BATTERY_HEALTH_DEAD -> "изношена"
+            else -> "не сообщается"
+        }
+        val sf = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        val freeGb = sf.availableBytes / 1_073_741_824.0
+        val totalGb = sf.totalBytes / 1_073_741_824.0
+        val mi = android.app.ActivityManager.MemoryInfo()
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+        val net = try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+            when {
+                caps == null -> "нет сети"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "Wi‑Fi"
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная сеть"
+                else -> "сеть есть"
+            }
+        } catch (_: Exception) { "неизвестно" }
+        ToolResult.ok(
+            "Заряд: ${pct?.let { "$it%" } ?: "неизвестно"}" + (if (charging) ", заряжается" + (if (src.isNotEmpty()) " ($src)" else "") else ", не заряжается") + "\n" +
+                "Температура батареи: ${"%.1f".format(temp)} °C; тепловое состояние: $thermalText; состояние батареи: $healthText\n" +
+                "Свободно на накопителе: ${"%.1f".format(freeGb)} из ${"%.0f".format(totalGb)} ГБ\n" +
+                "Свободно оперативной памяти: ${mi.availMem / 1_048_576} из ${mi.totalMem / 1_048_576} МБ" + (if (mi.lowMemory) " (мало)" else "") + "\n" +
+                "Сеть: $net\n" +
+                "Время: " + timeFmt.format(Date()),
+        )
+    } catch (e: Exception) {
+        ToolResult.failed("Не удалось прочитать состояние телефона: " + (e.message ?: e.javaClass.simpleName))
     }
 
     private suspend fun askClaudeCode(task: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

@@ -185,3 +185,30 @@ class PhoneAuditTest {
         assertEquals(listOf("b", "a"), t.map { it.pkg })
     }
 }
+
+class SafetyAndSpeechTest {
+    @Test fun dialerServiceCodesAreDenied() {
+        for (c in listOf("*#0228#", "*#*#4636#*#*", "*#06#", "##4636##", "*123#", " *#0228# ")) {
+            assertTrue(c, DialCodes.isServiceCode(c))
+            val d = ConfirmationPolicy(AutonomyMode.AUTONOMOUS, true).evaluate(ToolCall("input_text", mapOf("text" to c)), ActionContext(currentApp = "Телефон"))
+            assertTrue(c, d is PolicyDecision.Deny)
+        }
+        for (c in listOf("+59899123456", "Привет, как дела?", "Заказ #12", "Скидка 5%", "12:30")) assertTrue(c, !DialCodes.isServiceCode(c))
+    }
+
+    @Test fun phoneStatusToolIsSafeAndNamed() {
+        val spec = ToolCatalog.find("phone_status")!!
+        assertEquals(Risk.SAFE, spec.risk)
+        assertTrue(SystemPrompt.build().contains("phone_status"))
+        assertTrue(SystemPrompt.build().contains("Maxim Ricco"))
+    }
+
+    @Test fun callButtonNeedsConfirmation() {
+        val d = ConfirmationPolicy(AutonomyMode.AUTONOMOUS, true).evaluate(ToolCall("tap_text", mapOf("text" to "Вызов")), ActionContext(currentApp = "Телефон"))
+        assertTrue(d is PolicyDecision.Confirm)
+    }
+
+    @Test fun aiIsSpelledInRussian() {
+        assertEquals("Руся Эй Ай готова", Speakable.clean("Руся AI готова"))
+    }
+}

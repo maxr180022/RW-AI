@@ -10,8 +10,8 @@ import android.speech.RecognitionService
 import android.speech.SpeechRecognizer
 
 /**
- * Делает RW AI доступным в списке «Цифровой помощник по умолчанию». Когда владелец выбирает его там,
- * жест вызова ассистента (долгое нажатие кнопки «Домой» или боковой кнопки) показывает панель RW AI поверх экрана с голосовым вводом.
+ * Делает Руся AI доступным в списке «Цифровой помощник по умолчанию». Когда владелец выбирает его там,
+ * жест вызова ассистента (долгое нажатие кнопки «Домой» или боковой кнопки) показывает панель Руся AI поверх экрана с голосовым вводом.
  */
 class RwVoiceInteractionService : VoiceInteractionService()
 
@@ -35,7 +35,7 @@ class RwSession(context: Context) : VoiceInteractionSession(context) {
 
 /**
  * Обязательная для регистрации ассистента служба распознавания. Она ничего не распознаёт:
- * голосовой ввод RW AI использует системное распознавание Google/Samsung.
+ * голосовой ввод Руся AI использует системное распознавание Google/Samsung.
  */
 class RwRecognitionService : RecognitionService() {
     override fun onStartListening(recognizerIntent: Intent?, listener: Callback?) {

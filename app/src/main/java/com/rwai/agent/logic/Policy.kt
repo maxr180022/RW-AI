@@ -98,8 +98,10 @@ class ConfirmationPolicy(
             "tap_text" -> evaluateTap(call.str("text").orEmpty(), ctx)
             "input_text" -> {
                 val text = call.str("text").orEmpty()
-                if (SecretRedactor.containsSecret(text, protectedSecrets())) {
-                    PolicyDecision.Deny("Нельзя вводить в приложения ключи и секреты RW AI.")
+                if (DialCodes.isServiceCode(text)) {
+                    PolicyDecision.Deny("Сервисные и USSD-коды (*#…#) вводить нельзя: они могут сбросить телефон или списать деньги. Для заряда и температуры используй phone_status.")
+                } else if (SecretRedactor.containsSecret(text, protectedSecrets())) {
+                    PolicyDecision.Deny("Нельзя вводить в приложения ключи и секреты Руся AI.")
                 } else if (ProfileTemplates.hasPlaceholders(text) && ctx.currentApp.orEmpty() !in profileApproved) {
                     PolicyDecision.Confirm(
                         title = "Ввести ваши личные данные",
@@ -160,6 +162,8 @@ class ConfirmationPolicy(
         return PolicyDecision.Allow
     }
 
+    private val callLabel = Regex("(?iu)^(вызов|вызвать|позвонить|набрать|call|dial|llamar|marcar)$")
+
     private fun evaluateTap(label: String, ctx: ActionContext): PolicyDecision {
         if (isUserOnlyLabel(label)) {
             return PolicyDecision.Deny("«$label» — это вход, CAPTCHA или биометрия. Такое подтверждает только сам пользователь.")
@@ -169,6 +173,14 @@ class ConfirmationPolicy(
                 title = "Опасное действие: «$label»",
                 details = describe(label, ctx, includeText = false),
                 reason = "Платежи, удаление и смена защитных настроек всегда требуют подтверждения.",
+                dangerous = true,
+            )
+        }
+        if (callLabel.containsMatchIn(label.trim())) {
+            return PolicyDecision.Confirm(
+                title = "Позвонить",
+                details = describe(label, ctx, includeText = false),
+                reason = "Звонок может стоить денег или набрать не тот номер — только с вашего подтверждения.",
                 dangerous = true,
             )
         }
@@ -205,5 +217,18 @@ class ConfirmationPolicy(
         } else {
             append("Последствия: действие может быть необратимым (оплата, удаление или смена настроек).")
         }
+    }
+}
+
+
+/** Сервисные (*#06#, *#*#4636#*#*) и USSD-коды набора: агент не вводит их никогда. */
+object DialCodes {
+    private val code = Regex("^\\s*[*#][*#0-9+]*#\\s*$")
+    private val inside = Regex("[*#]{1,2}[0-9]{2,6}[*#]")
+
+    fun isServiceCode(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty()) return false
+        return code.matches(t) || (t.length <= 40 && inside.containsMatchIn(t) && t.none { it.isLetter() })
     }
 }

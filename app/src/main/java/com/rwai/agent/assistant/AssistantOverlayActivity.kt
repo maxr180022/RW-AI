@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -93,6 +96,8 @@ class AssistantOverlayActivity : ComponentActivity() {
     private var heard by mutableStateOf("")
     private var note by mutableStateOf<String?>(null)
     private var submitted by mutableStateOf(false)
+    private var shown by mutableStateOf(false)
+    private val ui = android.os.Handler(android.os.Looper.getMainLooper())
     private var baseline = 0
 
     private val micPermission =
@@ -112,7 +117,9 @@ class AssistantOverlayActivity : ComponentActivity() {
                 OverlayUi()
             }
         }
-        if (micWasHeld) android.os.Handler(mainLooper).postDelayed({ startListening() }, 450) else startListening()
+        // Анимация панели идёт плавно сама по себе: тяжёлый запуск микрофона и распознавателя — только после неё.
+        shown = true
+        ui.postDelayed({ if (!isFinishing) startListening() }, if (micWasHeld) 650L else 520L)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -122,6 +129,7 @@ class AssistantOverlayActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        ui.removeCallbacksAndMessages(null)
         WakeState.overlayVisible = false
         WakeState.setPaused(false)
         voice.stop()
@@ -130,7 +138,7 @@ class AssistantOverlayActivity : ComponentActivity() {
 
     private fun startListening() {
         if (!Graph.settings.hasApiKey.value) {
-            note = "Сначала введите ключ DeepSeek в приложении RW AI."
+            note = "Сначала введите ключ DeepSeek в приложении Руся AI."
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -145,7 +153,7 @@ class AssistantOverlayActivity : ComponentActivity() {
         submitted = false
         voice.start(
             languageTag = Graph.settings.current.language,
-            onLevel = { level = it },
+            onLevel = { level = level * 0.55f + it * 0.45f },
             onPartial = { heard = it },
             onResult = { text, _ ->
                 listening = false
@@ -166,15 +174,14 @@ class AssistantOverlayActivity : ComponentActivity() {
     private fun close(stopSpeech: Boolean) {
         if (stopSpeech) Graph.speaker.stop()
         voice.stop()
-        finish()
+        shown = false
+        ui.postDelayed({ finish() }, 240)
     }
 
     @Composable
     private fun OverlayUi() {
         val state by Graph.controller.state.collectAsState()
-        var visible by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { visible = true }
-        val scrim by animateFloatAsState(if (visible) 0.35f else 0f, tween(350), label = "scrim")
+        val scrim by animateFloatAsState(if (shown) 0.32f else 0f, tween(300), label = "scrim")
         val none = remember { MutableInteractionSource() }
 
         val running = state.phase == Phase.RUNNING
@@ -194,10 +201,10 @@ class AssistantOverlayActivity : ComponentActivity() {
                 .clickable(interactionSource = none, indication = null) { close(true) },
         ) {
             AnimatedVisibility(
-                visible = visible,
+                visible = shown,
                 modifier = Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(300)),
-                exit = slideOutVertically(tween(250)) { it } + fadeOut(tween(200)),
+                enter = slideInVertically(spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(240)),
+                exit = slideOutVertically(tween(220, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(180)),
             ) {
                 Surface(
                     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -208,11 +215,12 @@ class AssistantOverlayActivity : ComponentActivity() {
                     Column {
                         Box(Modifier.fillMaxWidth().height(4.dp).background(brandBrush()))
                         Column(
-                            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))
+                                .navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Orb(listening = listening, level = level, working = running, speaking = speaking) { if (!listening) startListening() }
+                            Orb(listening = listening, level = { level }, working = running, speaking = speaking) { if (!listening) startListening() }
                             Text(statusText, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                             if (heard.isNotBlank()) {
                                 Text(
@@ -254,33 +262,33 @@ private val GlowBlue = Color(0xFF2B6BFF)
 private val GlowPink = Color(0xFFFF2D87)
 
 /**
- * Знак RW AI в центре. Свечение вокруг него — сверху синее, снизу красное (цвета знака): пульсирует в такт голосу,
+ * Знак Руся AI в центре. Свечение вокруг него — сверху синее, снизу красное (цвета знака): пульсирует в такт голосу,
  * вращающееся кольцо — пока агент работает, мягкое «дыхание» в покое.
  */
 @Composable
-private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Boolean, onClick: () -> Unit) {
+private fun Orb(listening: Boolean, level: () -> Float, working: Boolean, speaking: Boolean, onClick: () -> Unit) {
     val inf = rememberInfiniteTransition(label = "orb")
-    val breathe by inf.animateFloat(
+    // Значения читаются только при отрисовке (внутри draw/graphicsLayer): панель не перекомпонуется на каждом кадре.
+    val breathe = inf.animateFloat(
         0f, 1f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe",
     )
-    val flicker by inf.animateFloat(
+    val flicker = inf.animateFloat(
         0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing), RepeatMode.Reverse), label = "flicker",
     )
-    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(1800, easing = LinearEasing)), label = "spin")
-    val lv by animateFloatAsState(level, tween(90), label = "lv")
+    val spin = inf.animateFloat(0f, 360f, infiniteRepeatable(tween(1800, easing = LinearEasing)), label = "spin")
     val none = remember { MutableInteractionSource() }
-    // 0..1 — «сила» свечения
-    val amp = when {
-        listening -> 0.2f + lv * 0.8f
-        speaking -> 0.45f + flicker * 0.45f
-        working -> 0.35f + breathe * 0.2f
-        else -> breathe * 0.3f
+    fun amp(): Float = when { // 0..1 — «сила» свечения
+        listening -> 0.2f + level().coerceIn(0f, 1f) * 0.8f
+        speaking -> 0.45f + flicker.value * 0.45f
+        working -> 0.35f + breathe.value * 0.2f
+        else -> breathe.value * 0.3f
     }
     Box(
         modifier = Modifier.size(190.dp).clickable(interactionSource = none, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            val amp = amp()
             val c = center
             val base = size.minDimension * 0.30f
             for (i in 3 downTo 1) {
@@ -296,7 +304,7 @@ private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Bo
                 )
             }
             if (working) {
-                rotate(spin, pivot = c) {
+                rotate(spin.value, pivot = c) {
                     drawCircle(
                         brush = Brush.sweepGradient(listOf(Color.Transparent, GlowBlue, GlowPink, Color.Transparent), center = c),
                         radius = base * 1.25f,
@@ -308,11 +316,12 @@ private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Bo
         }
         Image(
             painter = painterResource(R.drawable.rw_mark),
-            contentDescription = "RW AI",
+            contentDescription = "Руся AI",
             modifier = Modifier.size(104.dp).graphicsLayer {
-                val sc = 1f + 0.14f * amp
+                val a = amp()
+                val sc = 1f + 0.14f * a
                 scaleX = sc; scaleY = sc
-                alpha = 0.72f + 0.28f * amp
+                alpha = 0.72f + 0.28f * a
             },
         )
     }
