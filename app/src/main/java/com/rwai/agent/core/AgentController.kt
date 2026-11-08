@@ -179,10 +179,12 @@ class AgentController(
         val s = settings.current
         val speakNow = speakTask
         val origin = originPkg
+        var movedApps = false
         val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t), s.language) }
         val secrets = { listOfNotNull(settings.apiKey()) }
         val redact: (String) -> String = { SecretRedactor.redact(it, secrets()) }
         val sink = ActivitySink { e ->
+            if (e.kind == "tool" && e.tool in APP_SWITCHING_TOOLS && !e.status.startsWith("denied")) movedApps = true
             try { db.logActivity(taskId, e.kind, e.tool, redact(e.detail), e.status) } catch (_: Exception) { }
             pushStep(e, redact)
         }
@@ -208,7 +210,7 @@ class AgentController(
                     appendCarry(original, redact(outcome.summary))
                     if (s.speakResults || speakNow) say(outcome.summary)
                     AgentNotifications.showResult(appContext, "RW AI: задача выполнена", outcome.summary)
-                    returnAfterTask(false, speakNow, origin)
+                    returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Готов")
                 }
                 is AgentOutcome.NeedsInput -> {
@@ -217,19 +219,19 @@ class AgentController(
                     if (speakNow) say(outcome.question)
                     AgentNotifications.showResult(appContext, "RW AI задаёт вопрос", outcome.question)
                     _state.update { it.copy(phase = Phase.WAITING_INPUT, status = "Жду ваш ответ", confirmation = null) }
-                    returnAfterTask(true, speakNow, origin)
+                    returnAfterTask(true, speakNow, origin, movedApps)
                 }
                 is AgentOutcome.Stopped -> {
                     addChat(ChatRole.SYSTEM, outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: задача остановлена", outcome.reason)
-                    returnAfterTask(false, speakNow, origin)
+                    returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Остановлено")
                 }
                 is AgentOutcome.Failed -> {
                     addChat(ChatRole.ERROR, outcome.reason)
                     if (speakNow) say("Ошибка. " + outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: ошибка", outcome.reason)
-                    returnAfterTask(false, speakNow, origin)
+                    returnAfterTask(false, speakNow, origin, movedApps)
                     setIdle("Ошибка")
                 }
             }
@@ -271,7 +273,8 @@ class AgentController(
 
 
     /** После задачи не оставляем агента в чужом приложении: возвращаем владельца туда, откуда он дал команду (или по настройке). */
-    private suspend fun returnAfterTask(needsAnswer: Boolean, spoken: Boolean, origin: String?) {
+    private suspend fun returnAfterTask(needsAnswer: Boolean, spoken: Boolean, origin: String?, movedApps: Boolean) {
+        if (!movedApps) return // агент никуда не уходил (например, просто ответил) — ничего не трогаем
         val svc = com.rwai.agent.accessibility.RwAccessibilityService.instance ?: return
         val pm = appContext.packageManager
         val launcher = try {
@@ -327,5 +330,6 @@ class AgentController(
 
     companion object {
         private const val CONFIRM_TIMEOUT_MS = 5 * 60_000L
+        private val APP_SWITCHING_TOOLS = setOf("launch_app", "open_url", "press_back", "tap_text")
     }
 }

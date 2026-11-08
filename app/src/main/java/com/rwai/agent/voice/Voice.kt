@@ -7,6 +7,9 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
 /** Push-to-talk распознавание речи. Все вызовы — из главного потока. Требует разрешение RECORD_AUDIO. */
@@ -103,8 +106,24 @@ class Speaker(context: Context) {
     private var tts: TextToSpeech? = null
     @Volatile private var ready = false
 
+    private val _speaking = MutableStateFlow(false)
+
+    /** true, пока идёт озвучивание (для анимации логотипа). */
+    val speaking: StateFlow<Boolean> get() = _speaking
+
     init {
-        tts = TextToSpeech(context.applicationContext) { status -> ready = status == TextToSpeech.SUCCESS }
+        tts = TextToSpeech(context.applicationContext) { status ->
+            ready = status == TextToSpeech.SUCCESS
+            if (ready) {
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) { _speaking.value = true }
+                    override fun onDone(utteranceId: String?) { _speaking.value = false }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) { _speaking.value = false }
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) { _speaking.value = false }
+                })
+            }
+        }
     }
 
     fun speak(text: String, languageTag: String): Boolean {

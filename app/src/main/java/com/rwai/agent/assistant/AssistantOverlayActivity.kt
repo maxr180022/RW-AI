@@ -22,6 +22,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -58,12 +59,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.rwai.agent.Graph
 import com.rwai.agent.MainActivity
+import com.rwai.agent.R
 import com.rwai.agent.core.ChatRole
 import com.rwai.agent.core.Phase
 import com.rwai.agent.ui.RwPalette
@@ -162,6 +168,7 @@ class AssistantOverlayActivity : ComponentActivity() {
         val none = remember { MutableInteractionSource() }
 
         val running = state.phase == Phase.RUNNING
+        val speaking by Graph.speaker.speaking.collectAsState()
         val answer = if (submitted) state.chat.drop(baseline).lastOrNull { it.role != ChatRole.USER }?.text else null
         val statusText = when {
             listening -> "Слушаю…"
@@ -195,7 +202,7 @@ class AssistantOverlayActivity : ComponentActivity() {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Orb(listening = listening, level = level, working = running) { if (!listening) startListening() }
+                            Orb(listening = listening, level = level, working = running, speaking = speaking) { if (!listening) startListening() }
                             Text(statusText, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                             if (heard.isNotBlank()) {
                                 Text(
@@ -233,43 +240,63 @@ class AssistantOverlayActivity : ComponentActivity() {
     }
 }
 
-/** Живой шар: пульсирует в такт голосу, вращается пока агент работает, «дышит» в покое. */
+/** Логотип RW AI в центре: мерцает и пульсирует в такт голосу, вращающееся кольцо — пока агент работает, «дышит» в покое. */
 @Composable
-private fun Orb(listening: Boolean, level: Float, working: Boolean, onClick: () -> Unit) {
+private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Boolean, onClick: () -> Unit) {
     val inf = rememberInfiniteTransition(label = "orb")
     val breathe by inf.animateFloat(
         0f, 1f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe",
     )
-    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(2200, easing = LinearEasing)), label = "spin")
+    val flicker by inf.animateFloat(
+        0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing), RepeatMode.Reverse), label = "flicker",
+    )
+    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(1800, easing = LinearEasing)), label = "spin")
     val lv by animateFloatAsState(level, tween(90), label = "lv")
     val none = remember { MutableInteractionSource() }
+    // 0..1 — «сила» свечения
+    val amp = when {
+        listening -> 0.2f + lv * 0.8f
+        speaking -> 0.45f + flicker * 0.45f
+        working -> 0.35f + breathe * 0.2f
+        else -> breathe * 0.3f
+    }
     Box(
-        modifier = Modifier.size(150.dp).clickable(interactionSource = none, indication = null, onClick = onClick),
+        modifier = Modifier.size(170.dp).clickable(interactionSource = none, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val c = center
             val base = size.minDimension * 0.27f
-            val amp = when {
-                listening -> 0.15f + lv * 0.85f
-                working -> 0.35f
-                else -> breathe * 0.25f
-            }
             for (i in 3 downTo 1) {
                 drawCircle(
-                    color = RwPalette.GradientStart.copy(alpha = 0.09f * (4 - i) * (0.5f + amp)),
-                    radius = base * (1f + 0.27f * i * (0.5f + amp)),
+                    color = RwPalette.GradientEnd.copy(alpha = 0.10f * (4 - i) * (0.4f + amp)),
+                    radius = base * (1f + 0.30f * i * (0.5f + amp)),
                     center = c,
                 )
             }
-            rotate(if (working) spin else 0f, pivot = c) {
-                drawCircle(
-                    brush = Brush.sweepGradient(listOf(RwPalette.GradientStart, RwPalette.GradientEnd, RwPalette.GradientStart), center = c),
-                    radius = base,
-                    center = c,
-                )
+            if (working) {
+                rotate(spin, pivot = c) {
+                    drawCircle(
+                        brush = Brush.sweepGradient(
+                            listOf(Color.Transparent, RwPalette.GradientStart, RwPalette.GradientEnd, Color.Transparent), center = c,
+                        ),
+                        radius = base * 1.18f,
+                        center = c,
+                        style = Stroke(width = 5.dp.toPx()),
+                    )
+                }
             }
-            drawCircle(Color.White.copy(alpha = 0.20f), radius = base * 0.5f, center = c - Offset(base * 0.22f, base * 0.28f))
         }
+        Image(
+            painter = painterResource(R.drawable.rw_logo),
+            contentDescription = "RW AI",
+            modifier = Modifier.size(84.dp)
+                .graphicsLayer {
+                    val sc = 1f + 0.16f * amp
+                    scaleX = sc; scaleY = sc
+                    alpha = 0.70f + 0.30f * amp
+                }
+                .clip(RoundedCornerShape(22.dp)),
+        )
     }
 }
