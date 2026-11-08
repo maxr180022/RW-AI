@@ -111,6 +111,29 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PhotoEncoder.MAX_PHOTOS)) { uris ->
         if (uris.isNotEmpty()) addUris(uris)
     }
+    // Съёмка прямо с камеры: системное приложение «Камера» сохраняет кадр во временный файл (разрешение CAMERA не нужно).
+    var cameraUri by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val u = cameraUri?.let { android.net.Uri.parse(it) }
+        cameraUri = null
+        if (ok && u != null) {
+            addUris(listOf(u))
+        } else {
+            photoNote = if (ok) null else "Съёмка отменена."
+        }
+    }
+    val takePhoto: () -> Unit = {
+        try {
+            val dir = java.io.File(ctx.cacheDir, "camera").apply { mkdirs() }
+            dir.listFiles()?.forEach { f -> if (System.currentTimeMillis() - f.lastModified() > 3_600_000L) f.delete() }
+            val f = java.io.File.createTempFile("shot_", ".jpg", dir)
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+            cameraUri = uri.toString()
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            photoNote = "Не удалось открыть камеру: " + (e.message ?: e.javaClass.simpleName)
+        }
+    }
     val shared by IncomingShare.uris.collectAsState()
     LaunchedEffect(shared) {
         if (shared.isNotEmpty()) {
@@ -345,6 +368,11 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                 modifier = Modifier.size(52.dp),
                 enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
             ) { Text("📎", fontSize = 22.sp) }
+            FilledTonalIconButton(
+                onClick = { takePhoto() },
+                modifier = Modifier.size(52.dp),
+                enabled = photos.size < PhotoEncoder.MAX_PHOTOS,
+            ) { Text("📷", fontSize = 22.sp) }
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },

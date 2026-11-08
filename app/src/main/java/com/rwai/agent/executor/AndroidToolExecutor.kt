@@ -16,6 +16,9 @@ import com.rwai.agent.logic.ToolExecutor
 import com.rwai.agent.logic.ToolResult
 import com.rwai.agent.logic.UiFormatter
 import com.rwai.agent.logic.UiMatcher
+import com.rwai.agent.logic.asJsonMap
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.rwai.agent.settings.SettingsStore
 import com.rwai.agent.voice.Speaker
 import java.text.SimpleDateFormat
@@ -46,6 +49,9 @@ class AndroidToolExecutor(
     override suspend fun execute(call: ToolCall): ToolResult = when (call.tool) {
         "launch_app" -> launchApp(call.str("app").orEmpty())
         "open_url" -> openUrl(call.str("url").orEmpty())
+        "web_search" -> webSearch(call.str("query").orEmpty())
+        "fetch_page" -> fetchPage(call.str("url").orEmpty())
+        "ask_claude_code" -> askClaudeCode(call.str("task").orEmpty())
         "inspect_screen" -> withScreen { cap -> ToolResult.ok(UiFormatter.format(cap.packageName, cap.infos), untrusted = true) }
         "find_text" -> findText(call.str("query").orEmpty())
         "tap_text" -> tapText(call.str("text").orEmpty(), call.int("index") ?: 0)
@@ -173,6 +179,63 @@ class AndroidToolExecutor(
         return withScreen { cap ->
             if (svc.scroll(cap, down)) ToolResult.ok(if (down) "Прокручено вниз." else "Прокручено вверх.")
             else ToolResult.failed("На экране нет прокручиваемого элемента или прокрутка невозможна (конец списка).")
+        }
+    }
+
+    /** Запрос не должен нести личные данные владельца: проверяем по профилю и по ключам. */
+    private fun leaksPrivateData(text: String): Boolean =
+        com.rwai.agent.logic.ProfileTemplates.redact(text, com.rwai.agent.Graph.profile.values()) != text
+
+    private suspend fun webSearch(query: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (query.isBlank()) return@withContext ToolResult.failed("Пустой запрос.")
+        if (leaksPrivateData(query)) return@withContext ToolResult.failed("В запросе есть личные данные владельца. Переформулируй запрос обезличенно.")
+        try {
+            val hits = com.rwai.agent.web.WebClient.search(query, com.rwai.agent.Graph.secretStore.get("brave_search_key"), settings.current.language)
+            if (hits.isEmpty()) ToolResult.ok("Ничего не найдено. Попробуй другую формулировку.", untrusted = true)
+            else ToolResult.ok("Результаты поиска «$query»:\n" + com.rwai.agent.logic.SearchParser.format(hits), untrusted = true)
+        } catch (e: com.rwai.agent.web.WebException) {
+            ToolResult.failed(e.message ?: "Ошибка поиска")
+        } catch (e: java.io.IOException) {
+            ToolResult.failed("Нет доступа к интернету или поисковик не отвечает.")
+        }
+    }
+
+    private suspend fun askClaudeCode(task: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val base = settings.current.bridgeUrl.trim().trimEnd('/')
+        val token = com.rwai.agent.Graph.secretStore.get("bridge_token")
+        if (base.isEmpty() || token.isNullOrBlank()) return@withContext ToolResult.unavailable("Мост к Claude Code не настроен (Настройки → Дополнительно).")
+        if (leaksPrivateData(task)) return@withContext ToolResult.failed("В задаче есть личные данные владельца. Опиши её обезличенно.")
+        try {
+            val body = com.rwai.agent.logic.Json.stringify(mapOf("task" to task))
+            val req = okhttp3.Request.Builder().url("$base/ask").header("Authorization", "Bearer $token")
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
+            val client = okhttp3.OkHttpClient.Builder().connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(290, java.util.concurrent.TimeUnit.SECONDS).build()
+            client.newCall(req).execute().use { r ->
+                val text = r.body?.string().orEmpty()
+                val map = com.rwai.agent.logic.Json.parse(text).asJsonMap()
+                when {
+                    r.code == 401 -> ToolResult.failed("Мост отклонил токен. Проверьте токен в настройках.")
+                    r.isSuccessful -> ToolResult.ok((map?.get("answer") as? String ?: text).take(6000), untrusted = true)
+                    else -> ToolResult.failed("Мост ответил ошибкой ${r.code}: " + (map?.get("error") as? String ?: "").take(300))
+                }
+            }
+        } catch (e: java.io.IOException) {
+            ToolResult.failed("Компьютер с мостом недоступен (включён ли он и запущен ли rw_bridge.py?).")
+        }
+    }
+
+    private suspend fun fetchPage(url: String): ToolResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (leaksPrivateData(url)) return@withContext ToolResult.failed("В ссылке есть личные данные владельца.")
+        try {
+            val (html, finalUrl) = com.rwai.agent.web.WebClient.request(url)
+            val text = com.rwai.agent.logic.WebText.htmlToText(html, 6000)
+            if (text.isBlank()) ToolResult.ok("Страница пустая или состоит только из скриптов.", untrusted = true)
+            else ToolResult.ok("Страница $finalUrl:\n$text", untrusted = true)
+        } catch (e: com.rwai.agent.web.WebException) {
+            ToolResult.failed(e.message ?: "Не удалось открыть страницу")
+        } catch (e: java.io.IOException) {
+            ToolResult.failed("Нет доступа к интернету или сайт не отвечает.")
         }
     }
 

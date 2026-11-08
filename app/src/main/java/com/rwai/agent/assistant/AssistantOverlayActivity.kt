@@ -61,7 +61,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -209,7 +208,7 @@ class AssistantOverlayActivity : ComponentActivity() {
                     Column {
                         Box(Modifier.fillMaxWidth().height(4.dp).background(brandBrush()))
                         Column(
-                            modifier = Modifier.navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -251,7 +250,13 @@ class AssistantOverlayActivity : ComponentActivity() {
     }
 }
 
-/** Логотип RW AI в центре: мерцает и пульсирует в такт голосу, вращающееся кольцо — пока агент работает, «дышит» в покое. */
+private val GlowBlue = Color(0xFF2B6BFF)
+private val GlowPink = Color(0xFFFF2D87)
+
+/**
+ * Знак RW AI в центре. Свечение вокруг него — сверху синее, снизу красное (цвета знака): пульсирует в такт голосу,
+ * вращающееся кольцо — пока агент работает, мягкое «дыхание» в покое.
+ */
 @Composable
 private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Boolean, onClick: () -> Unit) {
     val inf = rememberInfiniteTransition(label = "orb")
@@ -272,26 +277,29 @@ private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Bo
         else -> breathe * 0.3f
     }
     Box(
-        modifier = Modifier.size(170.dp).clickable(interactionSource = none, indication = null, onClick = onClick),
+        modifier = Modifier.size(190.dp).clickable(interactionSource = none, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val c = center
-            val base = size.minDimension * 0.27f
+            val base = size.minDimension * 0.30f
             for (i in 3 downTo 1) {
+                val r = base * (1f + 0.30f * i * (0.5f + amp))
+                val a = 0.16f * (4 - i) * (0.4f + amp)
                 drawCircle(
-                    color = RwPalette.GradientEnd.copy(alpha = 0.10f * (4 - i) * (0.4f + amp)),
-                    radius = base * (1f + 0.30f * i * (0.5f + amp)),
+                    brush = Brush.verticalGradient(
+                        listOf(GlowBlue.copy(alpha = a.coerceAtMost(0.6f)), GlowPink.copy(alpha = a.coerceAtMost(0.6f))),
+                        startY = c.y - r, endY = c.y + r,
+                    ),
+                    radius = r,
                     center = c,
                 )
             }
             if (working) {
                 rotate(spin, pivot = c) {
                     drawCircle(
-                        brush = Brush.sweepGradient(
-                            listOf(Color.Transparent, RwPalette.GradientStart, RwPalette.GradientEnd, Color.Transparent), center = c,
-                        ),
-                        radius = base * 1.18f,
+                        brush = Brush.sweepGradient(listOf(Color.Transparent, GlowBlue, GlowPink, Color.Transparent), center = c),
+                        radius = base * 1.25f,
                         center = c,
                         style = Stroke(width = 5.dp.toPx()),
                     )
@@ -299,15 +307,13 @@ private fun Orb(listening: Boolean, level: Float, working: Boolean, speaking: Bo
             }
         }
         Image(
-            painter = painterResource(R.drawable.rw_logo),
+            painter = painterResource(R.drawable.rw_mark),
             contentDescription = "RW AI",
-            modifier = Modifier.size(84.dp)
-                .graphicsLayer {
-                    val sc = 1f + 0.16f * amp
-                    scaleX = sc; scaleY = sc
-                    alpha = 0.70f + 0.30f * amp
-                }
-                .clip(RoundedCornerShape(22.dp)),
+            modifier = Modifier.size(104.dp).graphicsLayer {
+                val sc = 1f + 0.14f * amp
+                scaleX = sc; scaleY = sc
+                alpha = 0.72f + 0.28f * amp
+            },
         )
     }
 }

@@ -49,9 +49,29 @@ fun isNotificationAccessEnabled(ctx: Context): Boolean =
     NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
 
 fun isAccessibilityEnabled(ctx: Context): Boolean {
-    val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
+    // Служба подключена прямо сейчас — самый надёжный признак (разные прошивки по-разному пишут список включённых служб).
+    if (RwAccessibilityService.instance != null) return true
+    val enabled = try {
+        Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+    } catch (_: Exception) { null } ?: return false
     val expected = ComponentName(ctx, RwAccessibilityService::class.java)
-    return enabled.split(':').any { ComponentName.unflattenFromString(it) == expected }
+    return enabled.split(':').any {
+        ComponentName.unflattenFromString(it) == expected ||
+            (it.startsWith(ctx.packageName + "/") && it.endsWith("RwAccessibilityService"))
+    }
+}
+
+/** RW AI выбран цифровым помощником по умолчанию (роль «Помощник» или выбранная служба голосового взаимодействия). */
+fun isDefaultAssistant(ctx: Context): Boolean {
+    try {
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val rm = ctx.getSystemService(android.app.role.RoleManager::class.java)
+            if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT) && rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)) return true
+        }
+    } catch (_: Exception) { }
+    return listOf("assistant", "voice_interaction_service").any { key ->
+        try { Settings.Secure.getString(ctx.contentResolver, key)?.contains(ctx.packageName + "/") == true } catch (_: Exception) { false }
+    }
 }
 
 private enum class Dest(val title: String, val icon: String) {

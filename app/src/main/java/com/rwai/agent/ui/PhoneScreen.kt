@@ -240,6 +240,7 @@ fun PhoneScreen(resumeTick: Int) {
                 advice?.let { Text(it) }
             }
         }
+        PhoneHealthCard(resumeTick)
         OutlinedButton(onClick = { WakeStats.resetDrain(ctx); stats = stats.first to null }, modifier = Modifier.padding(bottom = 16.dp)) {
             Text("Сбросить замеры расхода")
         }

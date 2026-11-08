@@ -33,6 +33,7 @@ class RwApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
+        com.rwai.agent.core.CrashLog.install(this)
         try {
             if (Graph.settings.current.quickReply && Graph.settings.hasApiKey.value) AgentNotifications.showQuick(this)
         } catch (_: Exception) {

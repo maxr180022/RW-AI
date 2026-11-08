@@ -12,6 +12,7 @@ data class ActivityRow(val id: Long, val ts: Long, val taskId: Long, val kind: S
 data class NotificationRow(
     val id: Long, val ts: Long, val pkg: String, val app: String,
     val sender: String?, val title: String?, val body: String?, val hidden: Boolean,
+    val group: Boolean = false, val tr: String? = null,
 )
 
 data class MemoryRow(val id: Long, val ts: Long, val source: String, val app: String?, val contact: String?, val title: String, val body: String)
@@ -20,19 +21,23 @@ data class MemoryRow(val id: Long, val ts: Long, val source: String, val app: St
  * Локальная база: журнал действий, уведомления и память с полнотекстовым поиском (FTS4, unicode61 —
  * корректно сравнивает регистр кириллицы). Всё хранится только на устройстве; резервное копирование выключено.
  */
-class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 1) {
+class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE activity(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, task_id INTEGER NOT NULL, kind TEXT NOT NULL, tool TEXT, detail TEXT NOT NULL, status TEXT NOT NULL)")
         db.execSQL("CREATE INDEX idx_activity_ts ON activity(ts)")
-        db.execSQL("CREATE TABLE notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, pkg TEXT NOT NULL, app TEXT NOT NULL, sender TEXT, title TEXT, body TEXT, hidden INTEGER NOT NULL DEFAULT 0, dedupe TEXT NOT NULL UNIQUE)")
+        db.execSQL("CREATE TABLE notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, pkg TEXT NOT NULL, app TEXT NOT NULL, sender TEXT, title TEXT, body TEXT, hidden INTEGER NOT NULL DEFAULT 0, dedupe TEXT NOT NULL UNIQUE, grp INTEGER NOT NULL DEFAULT 0, tr TEXT)")
         db.execSQL("CREATE INDEX idx_notifications_ts ON notifications(ts)")
         db.execSQL("CREATE TABLE memory(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, app TEXT, contact TEXT, title TEXT NOT NULL, body TEXT NOT NULL)")
         db.execSQL("CREATE VIRTUAL TABLE memory_fts USING fts4(title, body, tokenize=unicode61)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Версия схемы 1 — миграций пока нет.
+        if (oldVersion < 2) {
+            // v2: признак группового чата и перевод сообщения (для сводки и автоперевода)
+            db.execSQL("ALTER TABLE notifications ADD COLUMN grp INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE notifications ADD COLUMN tr TEXT")
+        }
     }
 
     // ---------------- Журнал действий ----------------
@@ -60,13 +65,14 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
     /** true — запись добавлена; false — дубликат. Запись попадает и в память для поиска (если не скрыта). */
     fun insertNotification(
         ts: Long, pkg: String, app: String, sender: String?, title: String?, body: String?, hidden: Boolean, dedupe: String,
+        group: Boolean = false,
     ): Boolean {
         val db = writableDatabase
         db.beginTransaction()
         try {
             val v = ContentValues().apply {
                 put("ts", ts); put("pkg", pkg); put("app", app); put("sender", sender); put("title", title)
-                put("body", body); put("hidden", if (hidden) 1 else 0); put("dedupe", dedupe)
+                put("body", body); put("hidden", if (hidden) 1 else 0); put("dedupe", dedupe); put("grp", if (group) 1 else 0)
             }
             val id = db.insertWithOnConflict("notifications", null, v, SQLiteDatabase.CONFLICT_IGNORE)
             if (id == -1L) return false
@@ -83,15 +89,32 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
     fun recentNotifications(limit: Int = 100, appFilter: String? = null): List<NotificationRow> {
         val out = ArrayList<NotificationRow>()
         val (sql, args) = if (appFilter.isNullOrBlank()) {
-            "SELECT id, ts, pkg, app, sender, title, body, hidden FROM notifications ORDER BY ts DESC LIMIT ?" to arrayOf(limit.toString())
+            "SELECT id, ts, pkg, app, sender, title, body, hidden, grp, tr FROM notifications ORDER BY ts DESC LIMIT ?" to arrayOf(limit.toString())
         } else {
-            "SELECT id, ts, pkg, app, sender, title, body, hidden FROM notifications WHERE lower(app) LIKE ? OR lower(pkg) LIKE ? ORDER BY ts DESC LIMIT ?" to
+            "SELECT id, ts, pkg, app, sender, title, body, hidden, grp, tr FROM notifications WHERE lower(app) LIKE ? OR lower(pkg) LIKE ? ORDER BY ts DESC LIMIT ?" to
                 arrayOf("%" + appFilter.lowercase() + "%", "%" + appFilter.lowercase() + "%", limit.toString())
         }
         readableDatabase.rawQuery(sql, args).use { c ->
-            while (c.moveToNext()) out += NotificationRow(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getInt(7) == 1)
+            while (c.moveToNext()) out += NotificationRow(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getInt(7) == 1, c.getInt(8) == 1, c.getString(9))
         }
         return out
+    }
+
+    /** Уведомления начиная с момента [sinceTs] (старые — первыми). */
+    fun notificationsSince(sinceTs: Long, limit: Int = 400): List<NotificationRow> {
+        val out = ArrayList<NotificationRow>()
+        readableDatabase.rawQuery(
+            "SELECT id, ts, pkg, app, sender, title, body, hidden, grp, tr FROM notifications WHERE ts >= ? ORDER BY ts ASC LIMIT ?",
+            arrayOf(sinceTs.toString(), limit.toString()),
+        ).use { c ->
+            while (c.moveToNext()) out += NotificationRow(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getInt(7) == 1, c.getInt(8) == 1, c.getString(9))
+        }
+        return out
+    }
+
+    fun setTranslation(id: Long, translation: String) {
+        val v = ContentValues().apply { put("tr", translation) }
+        writableDatabase.update("notifications", v, "id = ?", arrayOf(id.toString()))
     }
 
     fun notificationCount(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM notifications", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }

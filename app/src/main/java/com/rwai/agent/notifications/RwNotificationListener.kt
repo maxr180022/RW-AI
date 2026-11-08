@@ -2,7 +2,14 @@ package com.rwai.agent.notifications
 
 import com.rwai.agent.logic.BankGuard
 import android.app.Notification
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
+import com.rwai.agent.logic.MessageTriage
+import com.rwai.agent.digest.DigestManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
@@ -21,8 +28,32 @@ import kotlinx.coroutines.launch
 class RwNotificationListener : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var screenReceiver: BroadcastReceiver? = null
+
+    /** Экран выключен/разблокирован: события, а не опрос, — на расход заряда не влияет. */
+    private fun registerScreenReceiver() {
+        if (screenReceiver != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    Intent.ACTION_SCREEN_OFF -> DigestManager.onScreenOff()
+                    Intent.ACTION_USER_PRESENT -> DigestManager.onUserPresent(context.applicationContext)
+                }
+            }
+        }
+        val f = IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT) }
+        try { registerReceiver(r, f); screenReceiver = r } catch (_: Exception) { }
+    }
+
+    override fun onListenerDisconnected() {
+        screenReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) { } }
+        screenReceiver = null
+        super.onListenerDisconnected()
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        registerScreenReceiver()
         scope.launch {
             val days = Graph.settings.current.retentionDays
             if (days > 0) Graph.db.purgeOlderThan(System.currentTimeMillis() - days * 86_400_000L)
@@ -30,6 +61,8 @@ class RwNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        screenReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) { } }
+        screenReceiver = null
         scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         super.onDestroy()
     }
@@ -56,6 +89,8 @@ class RwNotificationListener : NotificationListenerService() {
 
         val items = ArrayList<Triple<Long, String?, String>>() // время, отправитель, текст
         val style = try { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notif) } catch (e: Exception) { null }
+        val isGroup = (style?.isGroupConversation == true) ||
+            (Build.VERSION.SDK_INT >= 28 && extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false))
         if (style != null && style.messages.isNotEmpty()) {
             for (m in style.messages) {
                 val t = m.text?.toString()?.trim().orEmpty()
@@ -81,8 +116,10 @@ class RwNotificationListener : NotificationListenerService() {
                         Graph.db.insertNotification(
                             ts, n.packageName, appLabel, sender, title, safeText, hidden = false,
                             dedupe = "${n.packageName}|${sender.orEmpty()}|$ts|${safeText.hashCode()}",
+                            group = isGroup,
                         )
                     }
+                    if (settings.autoTranslate && MessageTriage.isMessaging(n.packageName)) DigestManager.queueTranslation()
                 }
             } catch (_: Exception) {
                 // Запись уведомления не должна ронять службу

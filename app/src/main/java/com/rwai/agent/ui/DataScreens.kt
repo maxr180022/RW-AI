@@ -79,13 +79,31 @@ fun InboxScreen(resumeTick: Int) {
                     Button(enabled = !busy && rows.any { !it.hidden }, onClick = {
                         busy = true
                         scope.launch {
-                            summary = Graph.controller.summarizeNotifications()
+                            summary = try {
+                                withContext(Dispatchers.IO) {
+                                    com.rwai.agent.digest.DigestManager.translatePending()
+                                    com.rwai.agent.digest.DigestManager.build(System.currentTimeMillis() - 24 * 3_600_000L)
+                                } ?: "Новых сообщений нет."
+                            } catch (e: Exception) {
+                                "Не удалось собрать сводку: " + (e.message ?: "ошибка")
+                            }
+                            refresh++
                             busy = false
                         }
-                    }) { Text("Сводка (DeepSeek)") }
+                    }) { Text("Кто ждёт ответа") }
                     OutlinedButton(onClick = { refresh++ }) { Text("Обновить") }
                 }
                 if (busy) CircularProgressIndicator()
+                if (summary == null) {
+                    com.rwai.agent.digest.DigestManager.lastDigest()?.let { (ts, t) ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Последняя сводка · " + dateFmt.format(Date(ts)), style = MaterialTheme.typography.labelMedium)
+                                Text(t)
+                            }
+                        }
+                    }
+                }
                 summary?.let {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                         Text(it, modifier = Modifier.padding(12.dp))
@@ -110,6 +128,7 @@ private fun NotificationItem(r: NotificationRow) {
             val who = r.sender ?: r.title
             if (!who.isNullOrBlank()) Text(who, style = MaterialTheme.typography.titleSmall)
             Text(if (r.hidden) "[содержимое скрыто приложением]" else (r.body ?: ""), style = MaterialTheme.typography.bodyMedium)
+            if (!r.tr.isNullOrBlank()) Text("↳ " + r.tr, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -204,7 +223,18 @@ fun ActivityScreen() {
 
     LaunchedEffect(version) { rows = withContext(Dispatchers.IO) { Graph.db.recentActivity(300) } }
 
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var crash by remember(version) { mutableStateOf(com.rwai.agent.core.CrashLog.last(appCtx)) }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        crash?.let { text ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.padding(top = 8.dp)) {
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Последний сбой приложения (сохранён только на телефоне)", style = MaterialTheme.typography.titleSmall)
+                    Text(text.take(1200), style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = { com.rwai.agent.core.CrashLog.clear(appCtx); crash = null }) { Text("Скрыть") }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
             OutlinedButton(onClick = { version++ }) { Text("Обновить") }
             OutlinedButton(enabled = rows.isNotEmpty(), onClick = { confirmClear = true }) { Text("Очистить журнал") }

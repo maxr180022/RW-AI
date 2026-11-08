@@ -6,7 +6,7 @@ package com.rwai.agent.logic
  * Обратная замена не даёт значениям уйти к модели с экрана: на выходе вместо значения снова стоит плейсхолдер.
  */
 object ProfileTemplates {
-    private val token = Regex("\\{\\{\\s*profile\\.([a-z0-9_]{1,40})\\s*}}", RegexOption.IGNORE_CASE)
+    private val token = Regex("\\{\\{\\s*profile\\.([a-z0-9_]{1,40})\\s*\\}\\}", RegexOption.IGNORE_CASE)
     private val keyRegex = Regex("[a-z][a-z0-9_]{0,39}")
 
     data class Expanded(val text: String, val missing: List<String>)

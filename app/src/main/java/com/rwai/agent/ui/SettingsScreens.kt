@@ -124,19 +124,23 @@ fun PermissionsScreen(resumeTick: Int) {
         )
         Card {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Ассистент по умолчанию", style = MaterialTheme.typography.titleSmall)
-                Text(
+                val isAssistant = remember(resumeTick) { isDefaultAssistant(ctx) }
+                Text("Ассистент по умолчанию" + if (isAssistant) " ✅" else "", style = MaterialTheme.typography.titleSmall)
+                if (isAssistant) Text("RW AI уже выбран ассистентом: долгое нажатие кнопки вызова открывает его панель.", style = MaterialTheme.typography.bodySmall)
+                else Text(
                     "Чтобы долгое нажатие кнопки «Домой» или боковой кнопки открывало RW AI вместо Google: нажмите кнопку ниже и выберите RW AI в пункте «Цифровой помощник». " +
                         "На Samsung также проверьте: Настройки → Дополнительные функции → Боковая кнопка → Нажатие и удержание → «Открыть цифровой помощник».",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Button(onClick = {
+                val pickAssistant = {
                     try {
                         ctx.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     } catch (e: Exception) {
                         ctx.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
-                }) { Text("Выбрать ассистента") }
+                }
+                if (isAssistant) OutlinedButton(onClick = pickAssistant) { Text("Сменить ассистента") }
+                else Button(onClick = pickAssistant) { Text("Выбрать ассистента") }
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
@@ -341,6 +345,8 @@ fun SettingsScreen() {
             singleLine = true,
         )
 
+        ExtrasSettings()
+
         SectionTitle("Расход токенов")
         var cap by remember(settings.dailyTokenCap) { mutableStateOf(settings.dailyTokenCap.toString()) }
         Text("Сегодня использовано токенов: $tokensToday", style = MaterialTheme.typography.bodyMedium)
@@ -359,7 +365,7 @@ fun SettingsScreen() {
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные RW AI (память, уведомления, журнал)") }
-        Text("RW AI 0.1.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
+        Text("RW AI 0.2.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
     }
 
     if (confirmDeleteKey) {

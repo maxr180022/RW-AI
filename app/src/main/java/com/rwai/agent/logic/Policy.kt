@@ -119,6 +119,26 @@ class ConfirmationPolicy(
                 if (SecretRedactor.containsSecret(text, protectedSecrets())) PolicyDecision.Deny("Нельзя озвучивать секреты.") else PolicyDecision.Allow
             }
             "open_url" -> evaluateUrl(call.str("url").orEmpty())
+            "fetch_page" -> {
+                val url = call.str("url").orEmpty()
+                if (BankGuard.isBankingUrl(url)) PolicyDecision.Deny(BankGuard.REFUSAL)
+                else if (SecretRedactor.containsSecret(url, protectedSecrets())) PolicyDecision.Deny("Ссылка содержит секрет.")
+                else evaluateUrl(url)
+            }
+            "ask_claude_code" -> {
+                val task = call.str("task").orEmpty()
+                if (SecretRedactor.containsSecret(task, protectedSecrets())) PolicyDecision.Deny("Задача содержит секрет.")
+                else PolicyDecision.Confirm(
+                    title = "Передать задачу Claude Code на компьютере",
+                    details = task.take(400),
+                    reason = "Задача уйдёт на ваш компьютер и выполнится там по вашей подписке Claude Code.",
+                    dangerous = false,
+                )
+            }
+            "web_search" -> {
+                val q = call.str("query").orEmpty()
+                if (SecretRedactor.containsSecret(q, protectedSecrets())) PolicyDecision.Deny("Запрос содержит секрет.") else PolicyDecision.Allow
+            }
             else -> PolicyDecision.Allow
         }
     }

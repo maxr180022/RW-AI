@@ -244,9 +244,11 @@ class AgentController(
                 setIdle("Остановлено")
             }
             throw e
-        } catch (e: Exception) {
-            addChat(ChatRole.ERROR, "Внутренняя ошибка: ${e.javaClass.simpleName}")
-            try { db.logActivity(taskId, "task", null, "Внутренняя ошибка: ${e.javaClass.simpleName}", "failed") } catch (_: Exception) { }
+        } catch (e: Throwable) {
+            val name = e.javaClass.simpleName + (e.message?.let { ": " + it.take(160) } ?: "")
+            addChat(ChatRole.ERROR, "Внутренняя ошибка: $name")
+            try { db.logActivity(taskId, "task", null, "Внутренняя ошибка: $name", "failed") } catch (_: Exception) { }
+            if (speakNow) try { say("Произошла внутренняя ошибка.") } catch (_: Throwable) { }
             setIdle("Ошибка")
         } finally {
             withContext(NonCancellable) {

@@ -34,6 +34,13 @@ data class Settings(
     /** charging | charging_screen | always */
     val wakeMode: String = "always",
     val wakeName: String = "руся",
+    /** Утренняя сводка: показывать после разблокировки, если экран был выключен дольше [digestGapHours]. */
+    val digestEnabled: Boolean = true,
+    val digestGapHours: Int = 4,
+    /** Автоперевод входящих (испанский/английский → язык приложения). */
+    val autoTranslate: Boolean = true,
+    /** Адрес моста к Claude Code на компьютере владельца (токен — в SecretStore). */
+    val bridgeUrl: String = "",
 ) {
     val languageName: String
         get() = when (language.substringBefore('-')) {
@@ -86,6 +93,10 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             wakeEnabled = prefs.getBoolean("wakeEnabled", d.wakeEnabled),
             wakeMode = prefs.getString("wakeMode", d.wakeMode)?.takeIf { it in listOf("charging", "charging_screen", "always") } ?: d.wakeMode,
             wakeName = prefs.getString("wakeName", d.wakeName)?.takeIf { it.isNotBlank() } ?: d.wakeName,
+            digestEnabled = prefs.getBoolean("digestEnabled", d.digestEnabled),
+            digestGapHours = prefs.getInt("digestGapHours", d.digestGapHours).coerceIn(1, 48),
+            autoTranslate = prefs.getBoolean("autoTranslate", d.autoTranslate),
+            bridgeUrl = prefs.getString("bridgeUrl", d.bridgeUrl) ?: d.bridgeUrl,
         )
     }
 
@@ -99,6 +110,8 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putBoolean("maskCodes", s.maskCodes).putString("excludedApps", s.excludedApps)
             .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply).putString("afterTaskMode", s.afterTask)
             .putBoolean("wakeEnabled", s.wakeEnabled).putString("wakeMode", s.wakeMode).putString("wakeName", s.wakeName)
+            .putBoolean("digestEnabled", s.digestEnabled).putInt("digestGapHours", s.digestGapHours)
+            .putBoolean("autoTranslate", s.autoTranslate).putString("bridgeUrl", s.bridgeUrl)
             .apply()
         _state.value = s
     }
