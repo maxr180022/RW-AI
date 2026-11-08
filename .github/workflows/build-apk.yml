@@ -33,6 +33,19 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Stable signing key (so the app updates in place)
+        shell: bash
+        env:
+          RWAI_KEY_PASSPHRASE: ${{ secrets.RWAI_KEY_PASSPHRASE }}
+        run: |
+          if [ -z "$RWAI_KEY_PASSPHRASE" ] || [ ! -f rwai-signing.keystore.enc ]; then
+            echo "::warning::No stable signing key (secret RWAI_KEY_PASSPHRASE or rwai-signing.keystore.enc missing): APK gets a random debug key and cannot update the installed app."
+          else
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in rwai-signing.keystore.enc -out "$RUNNER_TEMP/rwai.keystore" -pass env:RWAI_KEY_PASSPHRASE
+            echo "RWAI_STABLE_KEYSTORE=$RUNNER_TEMP/rwai.keystore" >> "$GITHUB_ENV"
+            echo "RWAI_KEY_PASSPHRASE=$RWAI_KEY_PASSPHRASE" >> "$GITHUB_ENV"
+          fi
+
       - name: Unit tests (compiles all Kotlin code too)
         shell: bash
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest 2>&1 | tee build-unit-tests.log

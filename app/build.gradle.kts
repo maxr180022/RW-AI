@@ -8,6 +8,12 @@ plugins {
 val releaseKeystorePath: String? = System.getenv("RWAI_KEYSTORE_FILE")
 val releaseConfigured = !releaseKeystorePath.isNullOrBlank() && file(releaseKeystorePath).exists()
 
+// Постоянный ключ подписи для debug-сборок: без него каждая облачная сборка получает новый случайный ключ,
+// и Android не даёт обновить приложение поверх предыдущей версии. Путь и пароль задаёт только CI.
+val stableKeystorePath: String? = System.getenv("RWAI_STABLE_KEYSTORE")
+val stablePassword: String? = System.getenv("RWAI_KEY_PASSPHRASE")
+val stableConfigured = !stableKeystorePath.isNullOrBlank() && !stablePassword.isNullOrBlank() && file(stableKeystorePath).exists()
+
 android {
     namespace = "com.rwai.agent"
     compileSdk = 35
@@ -16,12 +22,21 @@ android {
         applicationId = "com.rwai.agent"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // Растёт с каждой облачной сборкой, чтобы новая версия всегда считалась обновлением.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
+        if (stableConfigured) {
+            create("stable") {
+                storeFile = file(stableKeystorePath!!)
+                storePassword = stablePassword
+                keyAlias = "rwai"
+                keyPassword = stablePassword
+            }
+        }
         if (releaseConfigured) {
             create("release") {
                 storeFile = file(releaseKeystorePath!!)
@@ -39,7 +54,8 @@ android {
             if (releaseConfigured) signingConfig = signingConfigs.getByName("release")
         }
         debug {
-            // Отладочный APK подписывается автоматически debug-ключом Android и устанавливается на телефон.
+            // С постоянным ключом приложение обновляется поверх прежней версии без переустановки и повторной выдачи разрешений.
+            if (stableConfigured) signingConfig = signingConfigs.getByName("stable")
         }
     }
 
