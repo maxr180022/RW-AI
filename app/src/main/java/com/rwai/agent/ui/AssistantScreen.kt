@@ -302,7 +302,14 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                                     .background(Color.White.copy(alpha = 0.05f))
                                     .border(1.dp, glowBorder(), RoundedCornerShape(16.dp))
-                                    .clickable { input = example }
+                                    .clickable {
+                                        // Подсказка отправляется сразу, как кнопка «Отправить» (с приложенными фото, если они есть).
+                                        Graph.controller.submit(example, photos)
+                                        input = ""
+                                        voiceNote = null
+                                        photos = emptyList()
+                                        photoNote = null
+                                    }
                                     .padding(horizontal = 14.dp, vertical = 11.dp),
                             ) { Text(example, style = MaterialTheme.typography.bodyMedium) }
                         }
