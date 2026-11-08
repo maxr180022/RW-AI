@@ -24,7 +24,7 @@ class SpeakableTest {
 class IdentityPromptTest {
     @Test fun agentKnowsNameCreatorAndGender() {
         val p = SystemPrompt.build()
-        assertTrue(p.contains("RW Agent")); assertTrue(p.contains("Эр Вэ Агент")); assertTrue(p.contains("RusWeo")); assertTrue(p.contains("мужского рода"))
+        assertTrue(p.contains("Руся AI")); assertTrue(p.contains("Руся Эй Ай")); assertTrue(p.contains("RusWeo")); assertTrue(p.contains("мужского рода"))
     }
 
     @Test fun promptListsOnlyKeysNotValues() {
