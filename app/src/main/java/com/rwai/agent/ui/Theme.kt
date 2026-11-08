@@ -1,6 +1,5 @@
 package com.rwai.agent.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -138,9 +137,9 @@ fun glowBorder(): Brush = Brush.linearGradient(listOf(RwPalette.Blue.copy(alpha 
 
 @Composable
 fun RwTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    // Дизайн «нейро» всегда тёмный, независимо от системной темы: светлые тексты и стекло рассчитаны на тёмный фон.
     MaterialTheme(
-        colorScheme = if (dark) DarkScheme else LightScheme,
+        colorScheme = DarkScheme,
         shapes = RwShapes,
         typography = RwTypography,
         content = content,
