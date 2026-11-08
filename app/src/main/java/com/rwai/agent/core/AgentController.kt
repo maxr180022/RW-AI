@@ -390,10 +390,30 @@ class AgentController(
     fun sendDraft(text: String) {
         val d = _state.value.draft ?: return
         if (job?.isActive == true || text.isBlank()) return
+        // Сначала быстрый путь: ответ прямо в уведомление, без перелистывания экранов. Не получилось — прежний путь через агента.
+        if (sendDirect(d.recipient, d.app, text)) return
         val ok = ApprovedSend(d.recipient, d.app, text)
         approvedSend = ok
         submit(SendApproval.sendTask(ok))
         if (job?.isActive != true) approvedSend = null // задача не запустилась (например, нет ключа): одобрение не остаётся висеть
+    }
+
+    /**
+     * Ответ без перелистывания экранов: через поле «Ответить» в самом уведомлении мессенджера (пока по этому разговору есть уведомление).
+     * Вызывается только кнопкой владельца с его текстом: нажатие и есть подтверждение. Агент сам этим путём не отправляет.
+     * false — такого уведомления нет или приложение отказалось; тогда остаётся путь через агента.
+     */
+    @Synchronized
+    fun sendDirect(recipient: String, app: String, text: String): Boolean {
+        val clean = text.trim()
+        if (job?.isActive == true || clean.isEmpty() || recipient.isBlank()) return false
+        val handle = com.rwai.agent.notifications.ReplyHandles.find(recipient, app) ?: return false
+        if (!com.rwai.agent.notifications.ReplyHandles.send(appContext, handle, clean)) return false
+        val now = System.currentTimeMillis()
+        _state.update { it.copy(draft = Draft(recipient, handle.app, clean, now)) }
+        com.rwai.agent.digest.RepliedStore.mark(recipient, now)
+        addChat(ChatRole.SYSTEM, "Отправлено $recipient · ${handle.app} · ${com.rwai.agent.logic.PendingReplies.stamp(now)} через ответ в уведомлении, приложение не открывалось: «${clean.take(300)}»")
+        return true
     }
 
     /** «Перепиши черновик»: агент покажет новый черновик и ничего не отправит. */
@@ -617,6 +637,7 @@ class AgentController(
         if (d?.sentAt != null) return // повторное нажатие в той же задаче не плодит записей
         val now = System.currentTimeMillis()
         _state.update { it.copy(draft = it.draft?.copy(sentAt = now)) }
+        d?.recipient?.let { com.rwai.agent.digest.RepliedStore.mark(it, now) } // строка «Не отвечено» это учтёт
         val to = d?.let { " " + it.recipient.ifBlank { "адресату" } + (if (it.app.isNotBlank()) " · ${it.app}" else "") }.orEmpty()
         addChat(ChatRole.SYSTEM, "Отправлено$to · " + SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(now)))
     }

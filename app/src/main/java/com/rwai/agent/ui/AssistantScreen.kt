@@ -89,10 +89,16 @@ import com.rwai.agent.core.Phase
 import com.rwai.agent.voice.VoiceInput
 
 @Composable
-fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: Int = 0) {
+fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: Int = 0, onOpenInbox: () -> Unit = {}) {
     val ctx = LocalContext.current
     val state by Graph.controller.state.collectAsState()
     val a11yOn = remember(resumeTick) { isAccessibilityEnabled(ctx) }
+    // «Не отвечено»: пересчитывается сама, когда приходят уведомления или владелец отвечает.
+    val dbTick by Graph.db.changes.collectAsState()
+    val repliedTick by com.rwai.agent.digest.RepliedStore.tick.collectAsState()
+    val pending by androidx.compose.runtime.produceState(emptyList<com.rwai.agent.logic.PendingReply>(), dbTick, repliedTick, resumeTick) {
+        value = com.rwai.agent.digest.RepliedStore.pending()
+    }
     val settings by Graph.settings.state.collectAsState()
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
@@ -212,6 +218,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
             percent = state.fillPercent,
             note = state.carriedFrom.takeIf { it.isNotBlank() && state.chat.isEmpty() }?.let { if (state.projectName != null) "Память проекта «${state.projectName}» уже здесь." else "Память диалога $it передана сюда в сжатом виде." },
         )
+        PendingStrip(pending, onOpenInbox)
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

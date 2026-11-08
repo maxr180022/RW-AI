@@ -26,6 +26,9 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
     /** Диалоги и проекты (v3). Живут в той же базе, чистятся вместе с остальными данными. */
     val dialogStore: DialogStore by lazy { DialogStore(this) }
 
+    /** Меняется, когда пришли новые уведомления: строка «Не отвечено» на главном экране пересчитывается сама. */
+    val changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
     private fun createDialogTables(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, memory TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE TABLE IF NOT EXISTS dialogs(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, project_id INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL, summary TEXT NOT NULL DEFAULT '', carried_from TEXT NOT NULL DEFAULT '', ctx_from INTEGER NOT NULL DEFAULT 0, compactions INTEGER NOT NULL DEFAULT 0)")

@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import com.rwai.agent.logic.MessageTriage
+import com.rwai.agent.logic.PendingReplies
 import com.rwai.agent.digest.DigestManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -103,6 +104,18 @@ class RwNotificationListener : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 
+        // Поле «Ответить» из уведомления личного разговора: по нему можно ответить, не открывая приложение (см. ReplyHandles).
+        if (!secret && !isGroup && MessageTriage.isMessaging(n.packageName)) {
+            val reply = notif.actions?.firstOrNull { a -> a.remoteInputs?.any { it.allowFreeFormInput } == true }
+            if (reply != null) {
+                val keys = HashSet<String>()
+                title?.let { keys += PendingReplies.key(it) }
+                items.forEach { (_, sender, _) -> sender?.let { keys += PendingReplies.key(it) } }
+                keys.remove("")
+                ReplyHandles.put(ReplyHandle(n.packageName, appLabel, keys, reply, n.postTime))
+            }
+        }
+
         scope.launch {
             try {
                 if (secret || items.isEmpty()) {
@@ -121,6 +134,7 @@ class RwNotificationListener : NotificationListenerService() {
                     }
                     if (settings.autoTranslate && MessageTriage.isMessaging(n.packageName)) DigestManager.queueTranslation()
                 }
+                Graph.db.changes.value = System.nanoTime() // строка «Не отвечено» пересчитывается
             } catch (_: Exception) {
                 // Запись уведомления не должна ронять службу
             }

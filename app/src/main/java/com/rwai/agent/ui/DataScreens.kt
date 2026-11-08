@@ -62,6 +62,7 @@ fun InboxScreen(resumeTick: Int) {
     var summary by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val enabled = remember(resumeTick) { isNotificationAccessEnabled(ctx) }
+    LaunchedEffect(resumeTick) { com.rwai.agent.digest.RepliedStore.markSeen() } // «новое» на главном экране считается от этого момента
 
     LaunchedEffect(refresh, resumeTick) {
         rows = withContext(Dispatchers.IO) { Graph.db.recentNotifications(150) }
@@ -159,7 +160,10 @@ private fun DigestCards(ts: Long?, text: String) {
                         Graph.controller.state.value.phase != Phase.IDLE -> hint = key to "Агент занят: дождитесь окончания задачи или нажмите «Стоп» на вкладке «Агент»."
                         else -> {
                             Graph.controller.submit(task, attach = DigestView.contextFor(it0))
-                            if (mark) answered = AnsweredStore.mark(key)
+                            if (mark) {
+                                answered = AnsweredStore.mark(key)
+                                it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.mark(who.first) }
+                            }
                             composing = null
                             draft = ""
                             hint = null
@@ -178,19 +182,38 @@ private fun DigestCards(ts: Long?, text: String) {
                             hint = null
                         }
                         ActionPill("Предложить ответ") { send(DigestView.suggestTask(it0), false) }
-                        if (done) ActionPill("Не отвечено") { answered = AnsweredStore.unmark(key) }
+                        if (done) ActionPill("Не отвечено") {
+                            answered = AnsweredStore.unmark(key)
+                            it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.unmark(who.first) }
+                        }
                     }
                     if (composing == key) {
                         OutlinedTextField(
                             value = draft,
                             onValueChange = { draft = it.take(500) },
-                            label = { Text("Что сделать?") },
+                            label = { Text("Что сделать? Или текст ответа") },
                             minLines = 2,
                             maxLines = 5,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ActionPill("Отправить", accent = true) { send(DigestView.replyTask(it0, draft), needs) }
+                            ActionPill("Поручить агенту", accent = true) { send(DigestView.replyTask(it0, draft), needs) }
+                            // Быстрый путь без перелистывания экранов: текст уходит прямо в уведомление мессенджера (если оно ещё есть).
+                            val who = it0.person()
+                            if (who != null && com.rwai.agent.notifications.ReplyHandles.canReply(who.first, who.second.orEmpty())) {
+                                ActionPill("Отправить как есть") {
+                                    when {
+                                        draft.isBlank() -> hint = key to "Напишите текст ответа."
+                                        Graph.controller.sendDirect(who.first, who.second.orEmpty(), draft) -> {
+                                            answered = AnsweredStore.mark(key)
+                                            composing = null
+                                            draft = ""
+                                            hint = key to "Отправлено без открытия приложения."
+                                        }
+                                        else -> hint = key to "Не получилось отправить через уведомление. Нажмите «Поручить агенту»."
+                                    }
+                                }
+                            }
                             ActionPill("Отмена") { composing = null; hint = null }
                         }
                     }

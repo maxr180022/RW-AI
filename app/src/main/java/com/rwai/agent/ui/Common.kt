@@ -211,6 +211,7 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
                         },
                         resumeTick = resumeTick,
                         voiceRequest = voiceTick,
+                        onOpenInbox = { tabRaw = Dest.INBOX.ordinal },
                     )
                     Dest.INBOX -> InboxScreen(resumeTick)
                     Dest.MORE -> when (more) {
