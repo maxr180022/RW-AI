@@ -21,6 +21,8 @@ import androidx.core.content.ContextCompat
 import com.rwai.agent.Graph
 import com.rwai.agent.MainActivity
 import com.rwai.agent.logic.ConfirmationRequest
+import com.rwai.agent.logic.NotifyKind
+import com.rwai.agent.logic.NotifyPolicy
 
 /**
  * Foreground-служба существует только пока выполняется задача пользователя: постоянное уведомление с кнопкой «Стоп»
@@ -107,6 +109,8 @@ object AgentNotifications {
         .build()
 
     fun showConfirmation(context: Context, req: ConfirmationRequest) {
+        // Владелец внутри приложения: карточка подтверждения уже в чате, уведомление не нужно (при сворачивании оно придёт, см. RwApp).
+        if (!NotifyPolicy.shouldShow(NotifyKind.CONFIRMATION, AppVisibility.inForeground)) return
         ensureChannels(context)
         val b = NotificationCompat.Builder(context, CH_CONFIRM)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
@@ -136,6 +140,8 @@ object AgentNotifications {
     }
 
     fun showResult(context: Context, title: String, text: String) {
+        // Владелец внутри приложения: ответ виден в чате, уведомление не нужно.
+        if (!NotifyPolicy.shouldShow(NotifyKind.RESULT, AppVisibility.inForeground)) return
         ensureChannels(context)
         val n = NotificationCompat.Builder(context, CH_RESULT)
             .setSmallIcon(android.R.drawable.ic_dialog_info)

@@ -34,6 +34,10 @@ class RwApp : Application() {
         super.onCreate()
         Graph.init(this)
         com.rwai.agent.core.CrashLog.install(this)
+        // Приложение свернули, а подтверждение ещё ждёт ответа (агент ушёл в другое приложение): теперь уведомление нужно.
+        com.rwai.agent.core.AppVisibility.install(this) { app ->
+            try { Graph.controller.state.value.confirmation?.let { AgentNotifications.showConfirmation(app, it) } } catch (_: Exception) { }
+        }
         try {
             if (Graph.settings.current.quickReply && Graph.settings.hasApiKey.value) AgentNotifications.showQuick(this)
         } catch (_: Exception) {

@@ -48,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -174,6 +175,34 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     // «Назад» из подраздела «Ещё» возвращает в меню, а не закрывает приложение.
     androidx.activity.compose.BackHandler(enabled = tab == Dest.MORE.ordinal && more != M_HUB) { more = M_HUB }
 
+    // Проект открывается отдельной страницей (диалоги проекта), а диалог проекта — внутренним экраном общения. Главная проекты не показывает.
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var projectId by rememberSaveable {
+        mutableLongStateOf(
+            Graph.controller.dialogsUi.value.dialogs.firstOrNull { it.id == Graph.controller.state.value.dialogId }?.projectId ?: 0L,
+        )
+    }
+    var projectChat by rememberSaveable { mutableStateOf(projectId != 0L) } // уже открыт диалог проекта: сразу в нём
+    val dlgUi by Graph.controller.dialogsUi.collectAsState()
+    val project = dlgUi.projects.firstOrNull { it.id == projectId }
+    if (projectId != 0L && project == null && dlgUi.projects.isNotEmpty()) { projectId = 0L; projectChat = false }
+    val inProject = tab == Dest.AGENT.ordinal && projectId != 0L && project != null
+    val leaveProject: () -> Unit = {
+        if (projectChat) projectChat = false
+        else if (Graph.controller.openMain()) projectId = 0L
+        else android.widget.Toast.makeText(ctx, "Дождитесь окончания задачи или нажмите «Стоп».", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    androidx.activity.compose.BackHandler(enabled = inProject) { leaveProject() }
+
+    // Агент ждёт подтверждения: карточка в чате «Агент», поэтому переходим туда сами (уведомление, пока вы в приложении, не приходит).
+    val waitingConfirm = Graph.controller.state.collectAsState().value.confirmation != null
+    LaunchedEffect(waitingConfirm) {
+        if (waitingConfirm) {
+            tabRaw = Dest.AGENT.ordinal
+            if (projectId != 0L) projectChat = true
+        }
+    }
+
     val subTitle = when (more) {
         M_MEMORY -> "Память"; M_LOG -> "Журнал"; M_PHONE -> "Телефон"; M_SETTINGS -> "Настройки"; M_COMMANDS -> "Команды @"; else -> "Ещё"
     }
@@ -186,8 +215,14 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = tab == Dest.AGENT.ordinal,
-        drawerContent = { DialogsDrawer(onClose = { drawerScope.launch { drawerState.close() } }) },
+        gesturesEnabled = tab == Dest.AGENT.ordinal && !inProject,
+        drawerContent = {
+            DialogsDrawer(
+                onClose = { drawerScope.launch { drawerState.close() } },
+                onOpenProject = { id -> projectId = id; projectChat = false },
+                onOpenMain = { projectId = 0L; projectChat = false },
+            )
+        },
     ) {
     Scaffold(
         containerColor = Color.Transparent,
@@ -197,13 +232,13 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             AppHeader(
-                title = if (tab == Dest.MORE.ordinal) subTitle else Dest.entries[tab].title,
-                back = if (inSub) ({ more = M_HUB }) else null,
-                onMenu = if (tab == Dest.AGENT.ordinal) ({ drawerScope.launch { drawerState.open() } }) else null,
+                title = if (inProject) "Проект · " + project!!.name else if (tab == Dest.MORE.ordinal) subTitle else Dest.entries[tab].title,
+                back = if (inProject) leaveProject else if (inSub) ({ more = M_HUB }) else null,
+                onMenu = if (tab == Dest.AGENT.ordinal && !inProject) ({ drawerScope.launch { drawerState.open() } }) else null,
             )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (Dest.entries[tab]) {
-                    Dest.AGENT -> AssistantScreen(
+                    Dest.AGENT -> if (inProject && !projectChat) ProjectPage(project!!) { projectChat = true } else AssistantScreen(
                         onFixAccess = {
                             settingsSection = 0
                             more = M_SETTINGS

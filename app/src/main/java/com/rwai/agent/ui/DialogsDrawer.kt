@@ -23,7 +23,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,13 +42,10 @@ import com.rwai.agent.logic.FillLevel
  * Оформление целиком из общих элементов приложения (GlassCard, ActionPill, градиенты и цвета RwPalette).
  */
 @Composable
-fun DialogsDrawer(onClose: () -> Unit) {
+fun DialogsDrawer(onClose: () -> Unit, onOpenProject: (Long) -> Unit, onOpenMain: () -> Unit) {
     val ui by Graph.controller.dialogsUi.collectAsState()
     val state by Graph.controller.state.collectAsState()
-    val activeProjectId = ui.dialogs.firstOrNull { it.id == state.dialogId }?.projectId ?: 0L
-    var chosen by rememberSaveable { mutableLongStateOf(-1L) } // -1: показывать проект открытого диалога
-    val projectId = if (chosen >= 0 && (chosen == 0L || ui.projects.any { it.id == chosen })) chosen else activeProjectId
-    val projectName = ui.projects.firstOrNull { it.id == projectId }?.name
+    val busy = "Дождитесь окончания задачи или нажмите «Стоп»."
 
     var hint by remember { mutableStateOf<String?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -74,30 +70,29 @@ fun DialogsDrawer(onClose: () -> Unit) {
             Box(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(accentBrush())
                     .clickable {
-                        if (Graph.controller.newDialog(projectId)) { hint = null; onClose() } else hint = "Дождитесь окончания задачи или нажмите «Стоп»."
+                        if (Graph.controller.newDialog(0L)) { hint = null; onOpenMain(); onClose() } else hint = busy
                     }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("＋  Новый диалог", style = MaterialTheme.typography.labelLarge, color = Color.White) }
             hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
+            // Проект — отдельная страница со своими диалогами и экраном общения, а не фильтр на главной.
             SectionTitle("Проекты")
-            DrawerRow("Без проекта", selected = projectId == 0L) { chosen = 0L }
-            ui.projects.forEach { p -> DrawerRow(p.name, selected = projectId == p.id) { chosen = p.id } }
+            if (ui.projects.isEmpty()) {
+                Text("Проектов пока нет.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            ui.projects.forEach { p -> DrawerRow(p.name, selected = false, arrow = true) { onOpenProject(p.id); onClose() } }
             Row { ActionPill("＋ Проект") { createError = null; creating = true } }
 
-            SectionTitle(if (projectName == null) "Диалоги" else "Диалоги проекта «$projectName»")
-            val list = ui.dialogs.filter { it.projectId == projectId }
+            SectionTitle("Диалоги")
+            val list = ui.dialogs.filter { it.projectId == 0L }
             if (list.isEmpty()) {
-                Text(
-                    "Здесь пока пусто. Нажмите «Новый диалог».",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Здесь пока пусто. Нажмите «Новый диалог».", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             list.forEach { d ->
-                DrawerRow(d.title, selected = d.id == state.dialogId) {
-                    if (Graph.controller.selectDialog(d.id)) { hint = null; onClose() } else hint = "Дождитесь окончания задачи или нажмите «Стоп»."
+                DrawerRow(d.title, selected = d.id == state.dialogId && state.projectName == null) {
+                    if (Graph.controller.selectDialog(d.id)) { hint = null; onOpenMain(); onClose() } else hint = busy
                 }
             }
         }
@@ -110,7 +105,7 @@ fun DialogsDrawer(onClose: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Проект изолирован: у него свои диалоги и своя память, ничего не смешивается с другими.",
+                        "У проекта своя страница, свои диалоги и своя память. Ничего не смешивается с другими.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -133,7 +128,12 @@ fun DialogsDrawer(onClose: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     val err = Graph.controller.createProject(newName, newNote)
-                    if (err == null) { creating = false; newName = ""; newNote = ""; createError = null } else createError = err
+                    if (err == null) {
+                        // Новый проект сразу открывается его страницей.
+                        val created = Graph.controller.dialogsUi.value.projects.lastOrNull()
+                        creating = false; newName = ""; newNote = ""; createError = null
+                        if (created != null) { onOpenProject(created.id); onClose() }
+                    } else createError = err
                 }) { Text("Создать") }
             },
             dismissButton = { TextButton(onClick = { creating = false }) { Text("Отмена") } },
@@ -143,9 +143,12 @@ fun DialogsDrawer(onClose: () -> Unit) {
 
 /** Строка меню: стеклянная карточка, выбранная подсвечена синей рамкой. */
 @Composable
-private fun DrawerRow(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun DrawerRow(text: String, selected: Boolean, arrow: Boolean = false, onClick: () -> Unit) {
     GlassCard(modifier = Modifier.clickable(onClick = onClick), accent = if (selected) RwPalette.Blue else null) {
-        Text(text, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (arrow) Text("›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

@@ -336,6 +336,23 @@ class AgentController(
         } catch (_: Exception) { false }
     }
 
+    /**
+     * Выход из проекта на главную: открывается последний диалог вне проектов (или создаётся новый), чтобы главная не показывала диалог проекта.
+     * false — идёт задача, выйти нельзя.
+     */
+    @Synchronized
+    fun openMain(): Boolean {
+        if (job?.isActive == true) return false
+        return try {
+            val cur = store.dialog(activeId)
+            if (cur != null && cur.projectId == 0L) return true
+            val d = store.dialogs().firstOrNull { it.projectId == 0L }
+            pendingQuestion = null
+            if (d != null) activate(d) else activate(newDialogRow(0L, "", ""))
+            true
+        } catch (_: Exception) { false }
+    }
+
     /** Создать проект. Возвращает null, если всё хорошо, иначе текст ошибки для экрана. */
     @Synchronized
     fun createProject(name: String, note: String): String? {
