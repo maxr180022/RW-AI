@@ -27,6 +27,8 @@ data class Settings(
     val dailyTokenCap: Int = 0,
     /** Постоянное уведомление с полем «Написать RW AI» в шторке. */
     val quickReply: Boolean = true,
+    /** Что делать после задачи: home — на главный экран, app — в RW AI, stay — остаться где есть. */
+    val afterTask: String = "home",
 ) {
     val languageName: String
         get() = when (language.substringBefore('-')) {
@@ -75,6 +77,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             excludedApps = prefs.getString("excludedApps", d.excludedApps) ?: d.excludedApps,
             dailyTokenCap = prefs.getInt("dailyTokenCap", d.dailyTokenCap),
             quickReply = prefs.getBoolean("quickReply", d.quickReply),
+            afterTask = prefs.getString("afterTask", d.afterTask)?.takeIf { it in listOf("home", "app", "stay") } ?: d.afterTask,
         )
     }
 
@@ -86,7 +89,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putBoolean("speakResults", s.speakResults).putBoolean("voiceAutoRun", s.voiceAutoRun)
             .putInt("retentionDays", s.retentionDays).putBoolean("captureNotifications", s.captureNotifications)
             .putBoolean("maskCodes", s.maskCodes).putString("excludedApps", s.excludedApps)
-            .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply)
+            .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply).putString("afterTask", s.afterTask)
             .apply()
         _state.value = s
     }

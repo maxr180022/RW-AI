@@ -161,6 +161,7 @@ class AgentController(
                     try { db.addMemory("task", null, null, command.take(200), outcome.summary) } catch (_: Exception) { }
                     if (s.speakResults) speaker.speak(outcome.summary.take(500), s.language)
                     AgentNotifications.showResult(appContext, "RW AI: задача выполнена", outcome.summary)
+                    returnAfterTask(false)
                     setIdle("Готов")
                 }
                 is AgentOutcome.NeedsInput -> {
@@ -168,15 +169,18 @@ class AgentController(
                     addChat(ChatRole.AGENT, outcome.question)
                     AgentNotifications.showResult(appContext, "RW AI задаёт вопрос", outcome.question)
                     _state.update { it.copy(phase = Phase.WAITING_INPUT, status = "Жду ваш ответ", confirmation = null) }
+                    returnAfterTask(true)
                 }
                 is AgentOutcome.Stopped -> {
                     addChat(ChatRole.SYSTEM, outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: задача остановлена", outcome.reason)
+                    returnAfterTask(false)
                     setIdle("Остановлено")
                 }
                 is AgentOutcome.Failed -> {
                     addChat(ChatRole.ERROR, outcome.reason)
                     AgentNotifications.showResult(appContext, "RW AI: ошибка", outcome.reason)
+                    returnAfterTask(false)
                     setIdle("Ошибка")
                 }
             }
@@ -213,6 +217,25 @@ class AgentController(
                 AgentNotifications.cancelConfirmation(appContext)
                 _state.update { it.copy(phase = Phase.RUNNING, confirmation = null) }
             }
+        }
+    }
+
+
+    /** После задачи не оставляем агента в чужом приложении: возвращаемся на главный экран (или в RW AI) по настройке. */
+    private suspend fun returnAfterTask(needsAnswer: Boolean) {
+        val svc = com.rwai.agent.accessibility.RwAccessibilityService.instance ?: return
+        val pkg = svc.currentPackage()
+        if (pkg == null || pkg == appContext.packageName) return
+        val mode = if (needsAnswer) "app" else settings.current.afterTask
+        delay(400)
+        when (mode) {
+            "home" -> svc.goHome()
+            "app" -> try {
+                svc.startActivity(
+                    android.content.Intent(appContext, com.rwai.agent.MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                )
+            } catch (_: Exception) { }
         }
     }
 

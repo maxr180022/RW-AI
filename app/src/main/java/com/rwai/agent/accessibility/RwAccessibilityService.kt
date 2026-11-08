@@ -156,6 +156,8 @@ class RwAccessibilityService : AccessibilityService() {
 
     fun back(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
 
+    fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+
     companion object {
         private const val MAX_NODES = 700
         private const val MAX_DEPTH = 40

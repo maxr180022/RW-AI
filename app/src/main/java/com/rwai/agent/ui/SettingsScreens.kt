@@ -288,6 +288,14 @@ fun SettingsScreen() {
             settings.autoSend,
         ) { v -> Graph.settings.update { it.copy(autoSend = v) } }
 
+        SectionTitle("После выполнения задачи")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            listOf("home" to "На главный экран", "app" to "В RW AI", "stay" to "Остаться").forEach { (v, label) ->
+                FilterChip(selected = settings.afterTask == v, onClick = { Graph.settings.update { it.copy(afterTask = v) } }, label = { Text(label) })
+            }
+        }
+        Text("Если агент задаёт вопрос, приложение RW AI открывается всегда.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
         SectionTitle("Язык и голос")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             listOf("ru-RU" to "Русский", "es-UY" to "Español (UY)", "es-ES" to "Español", "en-US" to "English").forEach { (tag, label) ->
