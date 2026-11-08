@@ -49,3 +49,44 @@ class IdentityPromptTest {
         assertTrue(policy.evaluate(ToolCall("input_text", mapOf("text" to "привет")), ctx) is PolicyDecision.Allow)
     }
 }
+
+class WakeTest {
+    @Test fun wakePhraseMatches() {
+        assertTrue(WakePhrase.matches("окей руся"))
+        assertTrue(WakePhrase.matches("Окей, Руся!"))
+        assertTrue(WakePhrase.matches("ок русь я включи музыку"))
+        assertTrue(WakePhrase.matches("okay русся"))
+        assertTrue(WakePhrase.matches("океи руси"))
+    }
+
+    @Test fun wakePhraseRejects() {
+        assertFalse(WakePhrase.matches("окей гугл"))
+        assertFalse(WakePhrase.matches("привет руся")) // без «окей» не просыпаемся: меньше случайных срабатываний
+        assertFalse(WakePhrase.matches("окей русский язык"))
+        assertFalse(WakePhrase.matches(""))
+    }
+
+    @Test fun customName() {
+        assertTrue(WakePhrase.matches("окей агент", "агент"))
+        assertFalse(WakePhrase.matches("окей руся", "агент"))
+    }
+
+    @Test fun gateModes() {
+        assertTrue(WakeGate.shouldListen("always", false, false))
+        assertFalse(WakeGate.shouldListen("charging", false, true))
+        assertTrue(WakeGate.shouldListen("charging", true, false))
+        assertTrue(WakeGate.shouldListen("charging_screen", false, true))
+        assertFalse(WakeGate.shouldListen("charging_screen", false, false))
+        assertFalse(WakeGate.shouldListen("off", true, true))
+    }
+
+    private fun snap(temp: Float = 30f, pct: Int = 60, charging: Boolean = false, mode: String = "always", wake: Boolean = true, drain: Float? = null, thermal: Int = 0) =
+        PhoneSnapshot(pct, temp, charging, thermal, wake, mode, 10, drain)
+
+    @Test fun advisorWarnsOnHeatAndDrain() {
+        assertTrue(PhoneAdvisor.tips(snap(temp = 43f)).any { it.warning && it.text.contains("нагрет") })
+        assertTrue(PhoneAdvisor.tips(snap(drain = 5f)).any { it.warning && it.text.contains("много") })
+        assertTrue(PhoneAdvisor.tips(snap(pct = 15)).any { it.warning && it.text.contains("Только на зарядке") })
+        assertTrue(PhoneAdvisor.tips(snap(wake = false)).any { it.text.contains("Всё в порядке") })
+    }
+}

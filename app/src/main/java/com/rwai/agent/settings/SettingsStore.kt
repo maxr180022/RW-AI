@@ -29,6 +29,11 @@ data class Settings(
     val quickReply: Boolean = true,
     /** Что делать после задачи: home — на главный экран, app — в RW AI, stay — остаться где есть. */
     val afterTask: String = "origin",
+    /** Голосовой вызов «Окей, <имя>» без нажатия кнопки. */
+    val wakeEnabled: Boolean = false,
+    /** charging | charging_screen | always */
+    val wakeMode: String = "always",
+    val wakeName: String = "руся",
 ) {
     val languageName: String
         get() = when (language.substringBefore('-')) {
@@ -78,6 +83,9 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             dailyTokenCap = prefs.getInt("dailyTokenCap", d.dailyTokenCap),
             quickReply = prefs.getBoolean("quickReply", d.quickReply),
             afterTask = prefs.getString("afterTaskMode", d.afterTask)?.takeIf { it in listOf("origin", "home", "app", "stay") } ?: d.afterTask,
+            wakeEnabled = prefs.getBoolean("wakeEnabled", d.wakeEnabled),
+            wakeMode = prefs.getString("wakeMode", d.wakeMode)?.takeIf { it in listOf("charging", "charging_screen", "always") } ?: d.wakeMode,
+            wakeName = prefs.getString("wakeName", d.wakeName)?.takeIf { it.isNotBlank() } ?: d.wakeName,
         )
     }
 
@@ -90,6 +98,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putInt("retentionDays", s.retentionDays).putBoolean("captureNotifications", s.captureNotifications)
             .putBoolean("maskCodes", s.maskCodes).putString("excludedApps", s.excludedApps)
             .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply).putString("afterTaskMode", s.afterTask)
+            .putBoolean("wakeEnabled", s.wakeEnabled).putString("wakeMode", s.wakeMode).putString("wakeName", s.wakeName)
             .apply()
         _state.value = s
     }

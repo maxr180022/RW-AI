@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
         resumeTick.intValue++
         AgentNotifications.clearResult(this)
         Graph.controller.rolloverIfNewDay()
+        com.rwai.agent.wake.WakeWordService.sync(this)
         if (Graph.settings.current.quickReply && Graph.settings.hasApiKey.value) AgentNotifications.showQuick(this)
     }
 

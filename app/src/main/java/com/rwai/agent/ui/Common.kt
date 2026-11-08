@@ -59,6 +59,7 @@ private enum class Dest(val title: String, val icon: String) {
     INBOX("Входящие", "📥"),
     MEMORY("Память", "🧠"),
     LOG("Журнал", "📜"),
+    PHONE("Телефон", "🔋"),
     SETTINGS("Ещё", "⚙️"),
 }
 
@@ -116,6 +117,7 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
                     Dest.INBOX -> InboxScreen(resumeTick)
                     Dest.MEMORY -> MemoryScreen()
                     Dest.LOG -> ActivityScreen()
+                    Dest.PHONE -> PhoneScreen(resumeTick)
                     Dest.SETTINGS -> SettingsHost(resumeTick, settingsSection) { settingsSection = it }
                 }
             }

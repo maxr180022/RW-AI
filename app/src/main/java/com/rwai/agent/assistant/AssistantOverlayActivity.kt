@@ -76,6 +76,7 @@ import com.rwai.agent.ui.RwPalette
 import com.rwai.agent.ui.RwTheme
 import com.rwai.agent.ui.brandBrush
 import com.rwai.agent.voice.VoiceInput
+import com.rwai.agent.wake.WakeState
 
 /**
  * Панель ассистента поверх текущего экрана (как у Google): открывается жестом вызова ассистента,
@@ -83,6 +84,10 @@ import com.rwai.agent.voice.VoiceInput
  * Приложение целиком при этом не открывается.
  */
 class AssistantOverlayActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_FROM_WAKE = "com.rwai.agent.extra.FROM_WAKE"
+    }
+
     private val voice by lazy { VoiceInput(this) }
     private var listening by mutableStateOf(false)
     private var level by mutableFloatStateOf(0f)
@@ -99,12 +104,16 @@ class AssistantOverlayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        WakeState.overlayVisible = true
+        // Освобождаем микрофон у слушателя «Окей, Руся», пока панель на экране.
+        val micWasHeld = WakeState.holdingMic
+        WakeState.setPaused(true)
         setContent {
             RwTheme {
                 OverlayUi()
             }
         }
-        startListening()
+        if (micWasHeld) android.os.Handler(mainLooper).postDelayed({ startListening() }, 450) else startListening()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -114,6 +123,8 @@ class AssistantOverlayActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        WakeState.overlayVisible = false
+        WakeState.setPaused(false)
         voice.stop()
         super.onDestroy()
     }
