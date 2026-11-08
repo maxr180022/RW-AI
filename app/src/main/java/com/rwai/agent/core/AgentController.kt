@@ -130,7 +130,8 @@ class AgentController(
             return
         }
         val original = pendingQuestion?.first ?: text
-        val command = pendingQuestion?.let { (orig, q) -> "Исходная задача: $orig\nТы спросил: $q\nОтвет владельца: $text" } ?: text
+        val modelText = com.rwai.agent.logic.Mentions.expand(text, settings.current.customCommands).forModel()
+        val command = pendingQuestion?.let { (orig, q) -> "Исходная задача: $orig\nТы спросил: $q\nОтвет владельца: $modelText" } ?: modelText
         pendingQuestion = null
         speakTask = speak
         originPkg = com.rwai.agent.accessibility.RwAccessibilityService.instance?.originPackage()

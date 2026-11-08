@@ -22,6 +22,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,14 +57,21 @@ import kotlinx.coroutines.withContext
 
 @Composable
 private fun ConnCard(title: String, connected: Boolean, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(if (connected) "✅ подключено" else "не подключено", style = MaterialTheme.typography.labelMedium)
+    GlassCard(accent = if (connected) Color(0xFF2ECC8F) else null) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier.clip(RoundedCornerShape(50))
+                    .background((if (connected) Color(0xFF2ECC8F) else Color.White).copy(alpha = 0.13f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(if (connected) Color(0xFF2ECC8F) else MaterialTheme.colorScheme.onSurfaceVariant))
+                Spacer(Modifier.width(6.dp))
+                Text(if (connected) "Подключено" else "Не подключено", style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
-            content()
         }
+        content()
     }
 }
 

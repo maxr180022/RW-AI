@@ -89,11 +89,16 @@ fun isDefaultAssistant(ctx: Context): Boolean {
 private enum class Dest(val title: String, val icon: Int) {
     AGENT("Агент", R.drawable.ic_nav_chat),
     INBOX("Входящие", R.drawable.ic_nav_inbox),
-    MEMORY("Память", R.drawable.ic_nav_memory),
-    LOG("Журнал", R.drawable.ic_nav_log),
-    PHONE("Телефон", R.drawable.ic_nav_phone),
-    SETTINGS("Ещё", R.drawable.ic_nav_more),
+    MORE("Ещё", R.drawable.ic_nav_more),
 }
+
+/** Экраны внутри «Ещё». */
+private const val M_HUB = -1
+private const val M_MEMORY = 0
+private const val M_LOG = 1
+private const val M_PHONE = 2
+private const val M_SETTINGS = 3
+private const val M_COMMANDS = 4
 
 /** Команда, подготовленная на другом экране (например, «Ответить» во «Входящих»): попадает в поле ввода агента. */
 object AgentPrefill {
@@ -142,7 +147,9 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     val hasKey by Graph.settings.hasApiKey.collectAsState()
     // Окно подключения показывается, пока нет ключа, и остаётся до нажатия «Начать работу».
     var wizard by rememberSaveable { mutableStateOf(!Graph.settings.hasApiKey.value) }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tabRaw by rememberSaveable { mutableIntStateOf(0) }
+    val tab = tabRaw.coerceIn(0, Dest.entries.lastIndex)
+    var more by rememberSaveable { mutableIntStateOf(M_HUB) }
     var settingsSection by rememberSaveable { mutableIntStateOf(0) }
 
     if (wizard || !hasKey) {
@@ -150,36 +157,55 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
         return
     }
 
-    // Жест ассистента или «Поделиться» из Галереи всегда ведут на вкладку «Агент».
+    // Жест ассистента, «Поделиться» или кнопки «Ответить» во «Входящих» всегда ведут на вкладку «Агент».
     val shared by IncomingShare.uris.collectAsState()
     val prefill by AgentPrefill.text.collectAsState()
     LaunchedEffect(voiceTick, shared, prefill) {
-        if (voiceTick > 0 || shared.isNotEmpty() || prefill != null) tab = Dest.AGENT.ordinal
+        if (voiceTick > 0 || shared.isNotEmpty() || prefill != null) tabRaw = Dest.AGENT.ordinal
     }
+
+    // «Назад» из подраздела «Ещё» возвращает в меню, а не закрывает приложение.
+    androidx.activity.compose.BackHandler(enabled = tab == Dest.MORE.ordinal && more != M_HUB) { more = M_HUB }
+
+    val subTitle = when (more) {
+        M_MEMORY -> "Память"; M_LOG -> "Журнал"; M_PHONE -> "Телефон"; M_SETTINGS -> "Настройки"; M_COMMANDS -> "Команды @"; else -> "Ещё"
+    }
+    val inSub = tab == Dest.MORE.ordinal && more != M_HUB
 
     Scaffold(
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.background(MaterialTheme.colorScheme.background).neuralGlow(),
-        bottomBar = { RwBottomBar(selected = tab, onSelect = { tab = it }) },
+        bottomBar = { RwBottomBar(selected = tab, onSelect = { if (it == Dest.MORE.ordinal && tab == it) more = M_HUB; tabRaw = it }) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            AppHeader(Dest.entries[tab].title)
+            AppHeader(
+                title = if (tab == Dest.MORE.ordinal) subTitle else Dest.entries[tab].title,
+                back = if (inSub) ({ more = M_HUB }) else null,
+            )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (Dest.entries[tab]) {
                     Dest.AGENT -> AssistantScreen(
                         onFixAccess = {
                             settingsSection = 0
-                            tab = Dest.SETTINGS.ordinal
+                            more = M_SETTINGS
+                            tabRaw = Dest.MORE.ordinal
                         },
                         resumeTick = resumeTick,
                         voiceRequest = voiceTick,
                     )
                     Dest.INBOX -> InboxScreen(resumeTick)
-                    Dest.MEMORY -> MemoryScreen()
-                    Dest.LOG -> ActivityScreen()
-                    Dest.PHONE -> PhoneScreen(resumeTick)
-                    Dest.SETTINGS -> SettingsHost(resumeTick, settingsSection) { settingsSection = it }
+                    Dest.MORE -> when (more) {
+                        M_MEMORY -> MemoryScreen()
+                        M_LOG -> ActivityScreen()
+                        M_PHONE -> PhoneScreen(resumeTick)
+                        M_SETTINGS -> SettingsHost(resumeTick, settingsSection) { settingsSection = it }
+                        M_COMMANDS -> CommandsScreen()
+                        else -> MoreHub(resumeTick) { target, section ->
+                            if (section >= 0) settingsSection = section
+                            more = target
+                        }
+                    }
                 }
             }
         }
@@ -261,7 +287,7 @@ private fun RwBottomBar(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 @Composable
-private fun AppHeader(title: String) {
+private fun AppHeader(title: String, back: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -278,9 +304,10 @@ private fun AppHeader(title: String) {
                 .clip(RoundedCornerShape(50))
                 .border(1.dp, glowBorder(), RoundedCornerShape(50))
                 .background(Color.White.copy(alpha = 0.04f))
+                .then(if (back != null) Modifier.clickable(onClick = back) else Modifier)
                 .padding(horizontal = 12.dp, vertical = 5.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text((if (back != null) "‹  " else "") + title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

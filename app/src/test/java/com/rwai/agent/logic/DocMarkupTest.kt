@@ -132,3 +132,48 @@ class DigestViewTest {
         assertEquals("Заголовок", Md.strip("## Заголовок"))
     }
 }
+
+class MentionsTest {
+    @Test fun expandsAndStrips() {
+        val r = Mentions.expand("@почта есть письма от Ивана?")
+        assertEquals("есть письма от Ивана?", r.text)
+        assertEquals(listOf("почта"), r.used)
+        assertTrue(r.forModel().startsWith("УКАЗАНИЯ ВЛАДЕЛЬЦА"))
+        assertTrue(r.forModel().contains("mail_list"))
+    }
+
+    @Test fun aliasesAndMultiple() {
+        val r = Mentions.expand("найди @YouTube клип и @Музыка включи")
+        assertEquals(listOf("ютуб", "музыка"), r.used)
+        assertEquals("найди клип и включи", r.text)
+    }
+
+    @Test fun unknownAndEmailsUntouched() {
+        val r = Mentions.expand("напиши на ivan@mail.ru и @неизвестно")
+        assertTrue(r.used.isEmpty())
+        assertEquals("напиши на ivan@mail.ru и @неизвестно", r.text)
+        assertEquals("напиши на ivan@mail.ru и @неизвестно", r.forModel())
+    }
+
+    @Test fun onlyCommandGivesDefaultTask() {
+        assertEquals("Что нового? Кратко.", Mentions.expand("@почта").text)
+    }
+
+    @Test fun customCommands() {
+        val raw = "@Работа=Открой Slack и прочитай канал работы\nплохо\nx=коротко"
+        val c = Mentions.parseCustom(raw)
+        assertEquals(1, c.size)
+        val r = Mentions.expand("@работа что там", raw)
+        assertEquals(listOf("работа"), r.used)
+        assertTrue(r.forModel().contains("Slack"))
+        assertEquals("работа=Открой Slack и прочитай канал работы", Mentions.serializeCustom(c))
+    }
+
+    @Test fun suggestionsAndComplete() {
+        val s = Mentions.suggestions("привет @по")
+        assertEquals("почта", s.first().primary)
+        assertEquals("привет @почта ", Mentions.complete("привет @по", s[0]))
+        assertTrue(Mentions.suggestions("без собаки").isEmpty())
+        assertTrue(Mentions.suggestions("@").size >= 8)
+    }
+}

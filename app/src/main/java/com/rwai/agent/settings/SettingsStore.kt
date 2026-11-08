@@ -41,6 +41,8 @@ data class Settings(
     val autoTranslate: Boolean = true,
     /** Адрес моста к Claude Code на компьютере владельца (токен — в SecretStore). */
     val bridgeUrl: String = "",
+    /** Свои @-команды: строки «имя=инструкция». */
+    val customCommands: String = "",
     /** Имя выбранного голоса синтезатора; пусто — автоматически (мужской, если есть). */
     val voiceName: String = "",
 ) {
@@ -99,6 +101,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             digestGapHours = prefs.getInt("digestGapHours", d.digestGapHours).coerceIn(1, 48),
             autoTranslate = prefs.getBoolean("autoTranslate", d.autoTranslate),
             bridgeUrl = prefs.getString("bridgeUrl", d.bridgeUrl) ?: d.bridgeUrl,
+            customCommands = prefs.getString("customCommands", d.customCommands) ?: d.customCommands,
             voiceName = prefs.getString("voiceName", d.voiceName) ?: d.voiceName,
         )
     }
@@ -114,7 +117,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
             .putInt("dailyTokenCap", s.dailyTokenCap).putBoolean("quickReply", s.quickReply).putString("afterTaskMode", s.afterTask)
             .putBoolean("wakeEnabled", s.wakeEnabled).putString("wakeMode", s.wakeMode).putString("wakeName", s.wakeName)
             .putBoolean("digestEnabled", s.digestEnabled).putInt("digestGapHours", s.digestGapHours)
-            .putBoolean("autoTranslate", s.autoTranslate).putString("bridgeUrl", s.bridgeUrl).putString("voiceName", s.voiceName)
+            .putBoolean("autoTranslate", s.autoTranslate).putString("bridgeUrl", s.bridgeUrl).putString("customCommands", s.customCommands).putString("voiceName", s.voiceName)
             .apply()
         _state.value = s
     }

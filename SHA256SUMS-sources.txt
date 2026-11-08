@@ -1,9 +1,9 @@
 3f79dd73e778f9e51b4094edbe170014681ed14af55c2087e1dc9e630c1b6685  .github/workflows/build-apk.yml
 d2bee005d995446a2558303a6eca9dc8cd8e5a1d64dee7870a5adcd3bb50d742  .gitignore
-2144a74b2fc6c2f520ed0ef7c838de1dc8b6c446103e3214dc6358197ac6d237  CHANGELOG.md
+b0d11718bae024bc5d533d10f6ab3827622ac28226fcf1183360f8c900bf4324  CHANGELOG.md
 d4c962cb286b6f62074ac8bb41e73994c776abe148103bd02c24eba4ac9a2f7e  README.md
 aea5cdfe19479bbd8179980648e6fa5fb603d147495df4106754713cb8604965  TODO.md
-422a9f7eb5497064be5db3a4949867ab7d6b005455eb23203409e51a1ed4b521  app/build.gradle.kts
+10e0b3f196589cd9a7b24db4af9e6791658f04d99b4d9f8163eb8980b870310b  app/build.gradle.kts
 0825ad4e4ace3a5787693dc369c70ded0b4eda8830291a2a29a5c1cd156219ff  app/proguard-rules.pro
 38e0a62cc2c2d9658b70dedc54bf6b319f5439e86b08f25044013b273f17af29  app/src/androidTest/java/com/rwai/agent/StorageInstrumentedTest.kt
 2799e17577462f4d7cf51cdb9d032ebaf5d44398fe240b1a984bf0fe70c8d868  app/src/main/AndroidManifest.xml
@@ -16,7 +16,7 @@ aea5cdfe19479bbd8179980648e6fa5fb603d147495df4106754713cb8604965  TODO.md
 c357608348b455bee46738cd9f23c343fe5c4e125febb6fd2d6cbc0fbbf51543  app/src/main/java/com/rwai/agent/connectors/MailClient.kt
 9f0309719005023ab9ca3d10e69bdbea9df1609287ae7a013268f8cf55f928fd  app/src/main/java/com/rwai/agent/connectors/MediaAndCalendar.kt
 ef2b7b41b7f08342ea6c1d7ea3d781f45a06198e646ea726d955f09530d1b4e9  app/src/main/java/com/rwai/agent/connectors/YouTubeClient.kt
-874d031933b594d92f4107b9504821a217979ccde941abfe3e6bc18537e5e7e3  app/src/main/java/com/rwai/agent/core/AgentController.kt
+5ac82fdfde366e6a6595626821dd031d91db22b1080c9675f515057a10a1be48  app/src/main/java/com/rwai/agent/core/AgentController.kt
 d1b1b68970125c4d8dd8bc59a822e962f2423faf2807e710361ae887e6191035  app/src/main/java/com/rwai/agent/core/AgentService.kt
 72993b41fff9cf0663782dbbedf52d26e47081d0d1aca63051ff8c31234e5212  app/src/main/java/com/rwai/agent/core/CrashLog.kt
 65b83ca6124f8f77628087f2a2e55ee63d5029a7452dac1b6a3f5a95f6bdd15a  app/src/main/java/com/rwai/agent/core/Photos.kt
@@ -33,6 +33,7 @@ b3447e4631323b49e60a562dccfe1fadfbf230a64596ea8b115de6c21ab757e8  app/src/main/j
 f877a6752b73959f225e7f4a71cce3e117523cd42f4b11fc11f9045f25da90e7  app/src/main/java/com/rwai/agent/logic/DigestView.kt
 d407d5e6c5e709d951df9b074e913f78b523a51dcbc9286e6d311067e3831032  app/src/main/java/com/rwai/agent/logic/DocMarkup.kt
 60f7b4809320753531f851880e4e4a5943b0c12ad52c65e53c3f53bc7f8009a5  app/src/main/java/com/rwai/agent/logic/Json.kt
+6761a6ce386bb474f23bf321d8d1597bb90b8866b846a90cbd9fda7d80b833e5  app/src/main/java/com/rwai/agent/logic/Mentions.kt
 b5743bdad98ca1fe1ed891bbaf6b8a92cf71a5f54ba57fe0a52321170265fd53  app/src/main/java/com/rwai/agent/logic/MessageTriage.kt
 d7c48c4744741caf0a13484b3798226d7ddeb9ec4147c0a5df0480657d9f4406  app/src/main/java/com/rwai/agent/logic/PhoneAudit.kt
 c30dc6a5751c06cc67dfb4fc9f81c8df45f8e71b39b949d840cb5b818d36e62f  app/src/main/java/com/rwai/agent/logic/PhraseFinder.kt
@@ -50,12 +51,13 @@ f3d2623a13b7f8d1f5fdc8cf96199321cac08de2507a4e5230614d60825d5fbe  app/src/main/j
 361ab736d686152c30f11d09a3da2cb10026d9499a6346fc0ee2333478c4964e  app/src/main/java/com/rwai/agent/phone/PhoneScan.kt
 0b471086bd013ae04e0633c04fb07cb342f79b4f514d5999445dbfaf04bde63f  app/src/main/java/com/rwai/agent/security/ProfileStore.kt
 cb0e9ad8d04dacee84e4d361af03fe3599b72ac899f5cea294ddfbd9b850926c  app/src/main/java/com/rwai/agent/security/SecretStore.kt
-bf48ae51ec67cc6bc721f145f45eefa0c1a413aa6003d8f9142623dec7191a61  app/src/main/java/com/rwai/agent/settings/SettingsStore.kt
-8277589e74335cf82b500bdbc02c311705e0c67ef836693a74a1d7201588de90  app/src/main/java/com/rwai/agent/ui/AssistantScreen.kt
-a921fa00854cb003df8ef7aa8fc7a1659875afdc164cc2017141c4ec70ddcc60  app/src/main/java/com/rwai/agent/ui/Common.kt
-db748839ee2cbe2b899a4787ac9084af1d38848a6aabd297a019188eb50a861c  app/src/main/java/com/rwai/agent/ui/ConnectionsScreen.kt
+e5d2b3f4ddc467ef4ed568c7c42af8c5e2b91b00fd4f0bdadde8be5e5abcef49  app/src/main/java/com/rwai/agent/settings/SettingsStore.kt
+49a26f6ed2be3e49daca014f63c74cd4f42c1409db039c8e6c9f668be0bf528e  app/src/main/java/com/rwai/agent/ui/AssistantScreen.kt
+fa838807c50bf049609ae0dad0c63e8b7ed8c76f4d34c4feef1f93ca8b8f3df6  app/src/main/java/com/rwai/agent/ui/Common.kt
+1b6954a76be981a001814ed9e1ffe0f628e8ca268aeadabc226bf14315bcae0f  app/src/main/java/com/rwai/agent/ui/ConnectionsScreen.kt
 d1e53f31410fd87f845bb137c54a909c1ecc9098eff0d723d2d0c5dd5df24269  app/src/main/java/com/rwai/agent/ui/DataScreens.kt
 c4e72b3799ba573232dd1bfc4d23235ca59a6aa72457911c7c54dca9403edbc1  app/src/main/java/com/rwai/agent/ui/ExtrasSettings.kt
+2e9c8c95c5b01fdc17ef562f42337c3e6adc6dca64edf17623b8892d1862d38b  app/src/main/java/com/rwai/agent/ui/MoreHub.kt
 6789edbfc9d6b4cf232fe15ee8bd0b6d87cc75bd0174d1feee3b906226121775  app/src/main/java/com/rwai/agent/ui/PhoneHealth.kt
 5e5e06b07941f6a412aacbc396e0131c010a7c106268ae7c25ba92805bbeacf5  app/src/main/java/com/rwai/agent/ui/PhoneScreen.kt
 79e90c0e0709c84360da73118beeee6feb62ef18ea24ba7ea1a14f57b19a3eee  app/src/main/java/com/rwai/agent/ui/ProfileScreen.kt
@@ -95,7 +97,7 @@ da86ec3a07b2e22b21cebb94aaa76773493abe92d6eddb581bb17758f076b789  app/src/main/r
 1d4e9f784af2e4fe60a51436720948556f4645fc8c32f14aa62d9384d300c48a  app/src/main/res/xml/voice_interaction_service.xml
 adc042d11b1103853b6916360e39d8717fc3d08a44e92e97d92d49981ad9ec65  app/src/test/java/com/rwai/agent/logic/AgentLoopTest.kt
 923aa52c80b6f64800fcecf4a603daf817e4e840ab3a1440c3830b8da11c4f5a  app/src/test/java/com/rwai/agent/logic/BankGuardTest.kt
-d0ff7de2506ee3b3c238efc8e5766e5fef9d72b42f2f67125f74de8c873cad75  app/src/test/java/com/rwai/agent/logic/DocMarkupTest.kt
+dbac06238dde7b2ff5febb24212fa4282b8c12a93a9b8eece9d634c52b77183a  app/src/test/java/com/rwai/agent/logic/DocMarkupTest.kt
 9365aacf5b1f29e84137faa4221900ed7cad798d5b782be5eae1f825161a72d8  app/src/test/java/com/rwai/agent/logic/JsonAndParserTest.kt
 87214a7a30c0a70d2312525294e017e3bd8c7748179ba1bd82ebe2d14aa87421  app/src/test/java/com/rwai/agent/logic/PolicySecurityTest.kt
 ab5501890d97b5ec97fe6f636104dc40999aab6658094f87aa09789114a2857a  app/src/test/java/com/rwai/agent/logic/ProfileTemplatesTest.kt
@@ -116,7 +118,7 @@ b373dee2d8f270701c5a9ddc170d2160c656ecc441a6ffa964710c7b350c4d1c  docs/LIMITATIO
 c1b1d09174c1d559d90fbda230654ad8c376b9beafdace3ee9430504887a2598  docs/PERMISSIONS.md
 d22243d4af18f0b2f5051ef4a8bd64ccab7496d2d901267d9614a5ca45459363  docs/SECURITY.md
 28fe5fbb5348e0a82749b25e2336f17db591d6f66c4de135f2d50f215f5df7e7  docs/TEST_PLAN.md
-07bf34f3cfbeb28f69fd8232ab612b297219cdd7e1ec46f1630eba32a6a11f16  docs/USER_GUIDE_RU.md
+2f45b2862f350f7917400f661a97e6d979eacc3e4bb79c0ec13e94e1736ad967  docs/USER_GUIDE_RU.md
 fa67fe47f0e990d31a465da4bfb8c91ae2eb7a55ff3ef57e5d23d43fb58a9374  gradle.properties
 117f79909222f2786e9c9813e23081f54ce0d294f53eeeaf210a7b439eb61f5f  gradle/libs.versions.toml
 7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172  gradle/wrapper/gradle-wrapper.jar

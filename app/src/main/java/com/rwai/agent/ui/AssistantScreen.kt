@@ -14,6 +14,8 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.TextField
@@ -285,7 +287,7 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         listOf(
-                            "Покажи последние уведомления",
+                            "@почта что нового?",
                             "Есть у меня непрочитанные сообщения?",
                             "Найди в памяти сообщения про аренду",
                             "Составь заявление в суд в PDF",
@@ -399,6 +401,15 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                 .border(1.dp, glowBorder(), RoundedCornerShape(26.dp))
                 .padding(horizontal = 6.dp, vertical = 4.dp),
         ) {
+            val suggestions = remember(input) { com.rwai.agent.logic.Mentions.suggestions(input, Graph.settings.current.customCommands) }
+            if (suggestions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    suggestions.forEach { c -> ActionPill("@" + c.primary + " · " + c.title) { input = com.rwai.agent.logic.Mentions.complete(input, c) } }
+                }
+            }
             TextField(
                 value = input,
                 onValueChange = { input = it },
