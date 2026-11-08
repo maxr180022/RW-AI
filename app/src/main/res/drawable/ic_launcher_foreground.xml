@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Стилизованные буквы «RW» -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,34 L30,74 L37,74 L37,58 L44,58 L51,74 L59,74 L51,56 C55,54 57,50 57,46 C57,39 52,34 45,34 Z M37,40 L44,40 C47,40 49.5,42 49.5,46 C49.5,50 47,52 44,52 L37,52 Z" />
+    <path
+        android:fillColor="#4FD1C5"
+        android:pathData="M60,34 L66,34 L70,60 L74,44 L80,44 L84,60 L88,34 L94,34 L87,74 L81,74 L77,56 L73,74 L67,74 Z" />
+</vector>

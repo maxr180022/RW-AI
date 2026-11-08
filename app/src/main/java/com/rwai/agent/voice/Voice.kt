@@ -1,0 +1,118 @@
+package com.rwai.agent.voice
+
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+
+/** Push-to-talk распознавание речи. Все вызовы — из главного потока. Требует разрешение RECORD_AUDIO. */
+class VoiceInput(private val context: Context) {
+    private var recognizer: SpeechRecognizer? = null
+
+    fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+
+    /**
+     * @param onResult текст и уверенность (0..1, либо null, если система её не сообщила)
+     */
+    fun start(
+        languageTag: String,
+        onPartial: (String) -> Unit,
+        onResult: (String, Float?) -> Unit,
+        onFail: (String) -> Unit,
+        onListening: () -> Unit = {},
+    ) {
+        stop()
+        if (!isAvailable()) {
+            onFail("На телефоне нет службы распознавания речи (установите/включите «Google» или голосовой ввод Samsung).")
+            return
+        }
+        val r = SpeechRecognizer.createSpeechRecognizer(context)
+        recognizer = r
+        r.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = onListening()
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let(onPartial)
+            }
+
+            override fun onResults(results: Bundle?) {
+                val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = texts?.firstOrNull()?.trim().orEmpty()
+                val conf = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)?.firstOrNull()
+                if (text.isEmpty()) onFail("Речь не распознана. Попробуйте ещё раз.") else onResult(text, conf)
+            }
+
+            override fun onError(error: Int) {
+                onFail(describe(error))
+            }
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        r.startListening(intent)
+    }
+
+    fun stop() {
+        recognizer?.let {
+            try { it.cancel(); it.destroy() } catch (_: Exception) { }
+        }
+        recognizer = null
+    }
+
+    private fun describe(code: Int): String = when (code) {
+        SpeechRecognizer.ERROR_AUDIO -> "Ошибка записи звука."
+        SpeechRecognizer.ERROR_CLIENT -> "Распознавание прервано."
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Нет разрешения на микрофон."
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Нет сети для распознавания речи."
+        SpeechRecognizer.ERROR_NO_MATCH -> "Речь не распознана. Попробуйте ещё раз."
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Распознаватель занят, повторите."
+        SpeechRecognizer.ERROR_SERVER -> "Ошибка сервера распознавания."
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Вы ничего не сказали."
+        else -> "Ошибка распознавания ($code)."
+    }
+}
+
+/** Озвучивание ответов через системный TextToSpeech. */
+class Speaker(context: Context) {
+    private var tts: TextToSpeech? = null
+    @Volatile private var ready = false
+
+    init {
+        tts = TextToSpeech(context.applicationContext) { status -> ready = status == TextToSpeech.SUCCESS }
+    }
+
+    fun speak(text: String, languageTag: String): Boolean {
+        val t = tts ?: return false
+        if (!ready) return false
+        val locale = Locale.forLanguageTag(languageTag)
+        val avail = t.isLanguageAvailable(locale)
+        if (avail == TextToSpeech.LANG_MISSING_DATA || avail == TextToSpeech.LANG_NOT_SUPPORTED) {
+            // Запасной вариант: язык без региона (es вместо es-UY)
+            val base = Locale(locale.language)
+            val a2 = t.isLanguageAvailable(base)
+            if (a2 == TextToSpeech.LANG_MISSING_DATA || a2 == TextToSpeech.LANG_NOT_SUPPORTED) return false
+            t.setLanguage(base)
+        } else {
+            t.setLanguage(locale)
+        }
+        return t.speak(text.take(3000), TextToSpeech.QUEUE_FLUSH, null, "rwai-" + System.nanoTime()) == TextToSpeech.SUCCESS
+    }
+
+    fun stop() { tts?.stop() }
+
+    fun shutdown() {
+        tts?.stop(); tts?.shutdown(); tts = null; ready = false
+    }
+}

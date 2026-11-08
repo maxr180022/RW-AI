@@ -1,0 +1,79 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RWAI_KEYSTORE_B64: ${{ secrets.RWAI_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests (compiles all Kotlin code too)
+        shell: bash
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest 2>&1 | tee build-unit-tests.log
+
+      - name: Build debug APK
+        shell: bash
+        run: ./gradlew --no-daemon --stacktrace assembleDebug 2>&1 | tee build-debug.log
+
+      - name: Build signed release APK (only if signing secrets are configured)
+        if: env.RWAI_KEYSTORE_B64 != ''
+        shell: bash
+        env:
+          RWAI_KEYSTORE_PASSWORD: ${{ secrets.RWAI_KEYSTORE_PASSWORD }}
+          RWAI_KEY_ALIAS: ${{ secrets.RWAI_KEY_ALIAS }}
+          RWAI_KEY_PASSWORD: ${{ secrets.RWAI_KEY_PASSWORD }}
+        run: |
+          echo "$RWAI_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          export RWAI_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          ./gradlew --no-daemon --stacktrace assembleRelease 2>&1 | tee build-release.log
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Collect artifacts and SHA-256
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/RWAI-0.1.0-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then cp app/build/outputs/apk/release/app-release.apk dist/RWAI-0.1.0-release.apk; fi
+          (cd dist && sha256sum *.apk | tee SHA256SUMS.txt)
+          cp build-*.log dist/ || true
+          cp -r app/build/reports/tests dist/unit-test-report 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rwai-apk
+          path: dist/
+          retention-days: 30
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rwai-build-logs
+          path: |
+            build-*.log
+            app/build/reports/
+          retention-days: 14
