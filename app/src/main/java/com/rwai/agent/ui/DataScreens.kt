@@ -159,6 +159,7 @@ private fun DigestCards(ts: Long?, text: String) {
                         !Graph.settings.hasApiKey.value -> hint = key to "Сначала введите API-ключ DeepSeek в настройках."
                         Graph.controller.state.value.phase != Phase.IDLE -> hint = key to "Агент занят: дождитесь окончания задачи или нажмите «Стоп» на вкладке «Агент»."
                         else -> {
+                            Graph.controller.openMain() // задача из «Входящих» относится к главному диалогу, а не к проекту, который остался открытым
                             Graph.controller.submit(task, attach = DigestView.contextFor(it0))
                             if (mark) {
                                 answered = AnsweredStore.mark(key)

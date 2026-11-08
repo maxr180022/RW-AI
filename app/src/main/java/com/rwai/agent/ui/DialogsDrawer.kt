@@ -42,16 +42,12 @@ import com.rwai.agent.logic.FillLevel
  * Оформление целиком из общих элементов приложения (GlassCard, ActionPill, градиенты и цвета RwPalette).
  */
 @Composable
-fun DialogsDrawer(onClose: () -> Unit, onOpenProject: (Long) -> Unit, onOpenMain: () -> Unit) {
+fun DialogsDrawer(onClose: () -> Unit) {
     val ui by Graph.controller.dialogsUi.collectAsState()
     val state by Graph.controller.state.collectAsState()
     val busy = "Дождитесь окончания задачи или нажмите «Стоп»."
 
     var hint by remember { mutableStateOf<String?>(null) }
-    var creating by rememberSaveable { mutableStateOf(false) }
-    var newName by rememberSaveable { mutableStateOf("") }
-    var newNote by rememberSaveable { mutableStateOf("") }
-    var createError by remember { mutableStateOf<String?>(null) }
 
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.background,
@@ -70,20 +66,12 @@ fun DialogsDrawer(onClose: () -> Unit, onOpenProject: (Long) -> Unit, onOpenMain
             Box(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(accentBrush())
                     .clickable {
-                        if (Graph.controller.newDialog(0L)) { hint = null; onOpenMain(); onClose() } else hint = busy
+                        if (Graph.controller.newDialog(0L)) { hint = null; onClose() } else hint = busy
                     }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("＋  Новый диалог", style = MaterialTheme.typography.labelLarge, color = Color.White) }
             hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-
-            // Проект — отдельная страница со своими диалогами и экраном общения, а не фильтр на главной.
-            SectionTitle("Проекты")
-            if (ui.projects.isEmpty()) {
-                Text("Проектов пока нет.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            ui.projects.forEach { p -> DrawerRow(p.name, selected = false, arrow = true) { onOpenProject(p.id); onClose() } }
-            Row { ActionPill("＋ Проект") { createError = null; creating = true } }
 
             SectionTitle("Диалоги")
             val list = ui.dialogs.filter { it.projectId == 0L }
@@ -92,53 +80,12 @@ fun DialogsDrawer(onClose: () -> Unit, onOpenProject: (Long) -> Unit, onOpenMain
             }
             list.forEach { d ->
                 DrawerRow(d.title, selected = d.id == state.dialogId && state.projectName == null) {
-                    if (Graph.controller.selectDialog(d.id)) { hint = null; onOpenMain(); onClose() } else hint = busy
+                    if (Graph.controller.selectDialog(d.id)) { hint = null; onClose() } else hint = busy
                 }
             }
         }
     }
 
-    if (creating) {
-        AlertDialog(
-            onDismissRequest = { creating = false },
-            title = { Text("Новый проект") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "У проекта своя страница, свои диалоги и своя память. Ничего не смешивается с другими.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it.take(DialogRules.NAME_CAP) },
-                        label = { Text("Название") },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = newNote,
-                        onValueChange = { newNote = it.take(DialogRules.NOTE_CAP) },
-                        label = { Text("О чём проект (необязательно)") },
-                        minLines = 2,
-                        maxLines = 4,
-                    )
-                    createError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val err = Graph.controller.createProject(newName, newNote)
-                    if (err == null) {
-                        // Новый проект сразу открывается его страницей.
-                        val created = Graph.controller.dialogsUi.value.projects.lastOrNull()
-                        creating = false; newName = ""; newNote = ""; createError = null
-                        if (created != null) { onOpenProject(created.id); onClose() }
-                    } else createError = err
-                }) { Text("Создать") }
-            },
-            dismissButton = { TextButton(onClick = { creating = false }) { Text("Отмена") } },
-        )
-    }
 }
 
 /** Строка меню: стеклянная карточка, выбранная подсвечена синей рамкой. */
@@ -157,7 +104,7 @@ private fun DrawerRow(text: String, selected: Boolean, arrow: Boolean = false, o
  * Цвета только из палитры приложения: градиент акцента, янтарный (внимание), красный (почти полон).
  */
 @Composable
-fun DialogMemoryBar(title: String, project: String?, percent: Int, note: String?) {
+fun DialogMemoryBar(title: String, percent: Int, note: String?) {
     if (title.isBlank()) return
     val level = DialogRules.level(percent)
     val textColor = when (level) {
@@ -168,12 +115,6 @@ fun DialogMemoryBar(title: String, project: String?, percent: Int, note: String?
     Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Внутри проекта это видно сразу: заметная метка с названием проекта.
-                if (project != null) {
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(accentBrush()).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                        Text("Проект · $project", style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
                 Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             Text("Чат заполнен на $percent %", style = MaterialTheme.typography.labelMedium, color = textColor)

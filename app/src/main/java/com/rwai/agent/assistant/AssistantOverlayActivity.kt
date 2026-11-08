@@ -164,6 +164,7 @@ class AssistantOverlayActivity : ComponentActivity() {
                 heard = text
                 baseline = Graph.controller.state.value.chat.size
                 submitted = true
+                Graph.controller.openMain() // команда из панели ассистента идёт в главный диалог, не в проект
                 Graph.controller.submit(text, speak = true) // без подтверждения: владелец сказал — агент выполняет
             },
             onFail = { msg ->

@@ -97,6 +97,7 @@ fun isDefaultAssistant(ctx: Context): Boolean {
 private enum class Dest(val title: String, val icon: Int) {
     AGENT("Агент", R.drawable.ic_nav_chat),
     INBOX("Входящие", R.drawable.ic_nav_inbox),
+    PROJECTS("Проекты", R.drawable.ic_nav_projects),
     MORE("Ещё", R.drawable.ic_nav_more),
 }
 
@@ -175,31 +176,34 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     // «Назад» из подраздела «Ещё» возвращает в меню, а не закрывает приложение.
     androidx.activity.compose.BackHandler(enabled = tab == Dest.MORE.ordinal && more != M_HUB) { more = M_HUB }
 
-    // Проект открывается отдельной страницей (диалоги проекта), а диалог проекта — внутренним экраном общения. Главная проекты не показывает.
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var projectId by rememberSaveable {
-        mutableLongStateOf(
-            Graph.controller.dialogsUi.value.dialogs.firstOrNull { it.id == Graph.controller.state.value.dialogId }?.projectId ?: 0L,
-        )
-    }
-    var projectChat by rememberSaveable { mutableStateOf(projectId != 0L) } // уже открыт диалог проекта: сразу в нём
+    // «Проекты» — отдельная вкладка внизу: список проектов, страница проекта (его диалоги), экран общения внутри проекта.
+    // Боковое меню остаётся только для диалогов главной. Открытый диалог проекта и диалог главной не смешиваются никогда.
+    var projectId by rememberSaveable { mutableLongStateOf(0L) }
+    var projectChat by rememberSaveable { mutableStateOf(false) }
     val dlgUi by Graph.controller.dialogsUi.collectAsState()
+    val ctrl by Graph.controller.state.collectAsState()
     val project = dlgUi.projects.firstOrNull { it.id == projectId }
     if (projectId != 0L && project == null && dlgUi.projects.isNotEmpty()) { projectId = 0L; projectChat = false }
-    val inProject = tab == Dest.AGENT.ordinal && projectId != 0L && project != null
-    val leaveProject: () -> Unit = {
-        if (projectChat) projectChat = false
-        else if (Graph.controller.openMain()) projectId = 0L
-        else android.widget.Toast.makeText(ctx, "Дождитесь окончания задачи или нажмите «Стоп».", android.widget.Toast.LENGTH_SHORT).show()
-    }
+    val inProjects = tab == Dest.PROJECTS.ordinal
+    val inProject = inProjects && project != null
+    // Экран общения проекта показывается только пока открыт именно диалог этого проекта (иначе, например после команды из панели ассистента, остаёмся на странице проекта).
+    if (inProjects && projectChat && project != null && ctrl.projectName != project.name) projectChat = false
+    val leaveProject: () -> Unit = { if (projectChat) projectChat = false else projectId = 0L }
     androidx.activity.compose.BackHandler(enabled = inProject) { leaveProject() }
 
-    // Агент ждёт подтверждения: карточка в чате «Агент», поэтому переходим туда сами (уведомление, пока вы в приложении, не приходит).
-    val waitingConfirm = Graph.controller.state.collectAsState().value.confirmation != null
+    // Главная всегда работает с диалогом вне проектов: вернулись на «Агент» (или запустили приложение), а открыт диалог проекта, — переходим на главный.
+    val inProjectDialog = ctrl.projectName != null
+    LaunchedEffect(tab, inProjectDialog, ctrl.dialogId) {
+        if (tab == Dest.AGENT.ordinal && inProjectDialog) Graph.controller.openMain()
+    }
+
+    // Агент ждёт подтверждения: карточка в том чате, где идёт задача (главный или проект), поэтому переходим туда сами.
+    val waitingConfirm = ctrl.confirmation != null
     LaunchedEffect(waitingConfirm) {
         if (waitingConfirm) {
-            tabRaw = Dest.AGENT.ordinal
-            if (projectId != 0L) projectChat = true
+            val name = Graph.controller.state.value.projectName
+            val p = if (name == null) null else Graph.controller.dialogsUi.value.projects.firstOrNull { it.name == name }
+            if (p != null) { projectId = p.id; projectChat = true; tabRaw = Dest.PROJECTS.ordinal } else tabRaw = Dest.AGENT.ordinal
         }
     }
 
@@ -208,6 +212,19 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     }
     val inSub = tab == Dest.MORE.ordinal && more != M_HUB
 
+    val agentScreen: @Composable () -> Unit = {
+        AssistantScreen(
+            onFixAccess = {
+                settingsSection = 0
+                more = M_SETTINGS
+                tabRaw = Dest.MORE.ordinal
+            },
+            resumeTick = resumeTick,
+            voiceRequest = voiceTick,
+            onOpenInbox = { tabRaw = Dest.INBOX.ordinal },
+        )
+    }
+
     // Боковое меню «Диалоги»: открывается кнопкой с тремя палочками в шапке (и свайпом от левого края) на вкладке «Агент».
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
@@ -215,13 +232,9 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = tab == Dest.AGENT.ordinal && !inProject,
+        gesturesEnabled = tab == Dest.AGENT.ordinal,
         drawerContent = {
-            DialogsDrawer(
-                onClose = { drawerScope.launch { drawerState.close() } },
-                onOpenProject = { id -> projectId = id; projectChat = false },
-                onOpenMain = { projectId = 0L; projectChat = false },
-            )
+            DialogsDrawer(onClose = { drawerScope.launch { drawerState.close() } })
         },
     ) {
     Scaffold(
@@ -234,20 +247,16 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
             AppHeader(
                 title = if (inProject) "Проект · " + project!!.name else if (tab == Dest.MORE.ordinal) subTitle else Dest.entries[tab].title,
                 back = if (inProject) leaveProject else if (inSub) ({ more = M_HUB }) else null,
-                onMenu = if (tab == Dest.AGENT.ordinal && !inProject) ({ drawerScope.launch { drawerState.open() } }) else null,
+                onMenu = if (tab == Dest.AGENT.ordinal) ({ drawerScope.launch { drawerState.open() } }) else null,
             )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (Dest.entries[tab]) {
-                    Dest.AGENT -> if (inProject && !projectChat) ProjectPage(project!!) { projectChat = true } else AssistantScreen(
-                        onFixAccess = {
-                            settingsSection = 0
-                            more = M_SETTINGS
-                            tabRaw = Dest.MORE.ordinal
-                        },
-                        resumeTick = resumeTick,
-                        voiceRequest = voiceTick,
-                        onOpenInbox = { tabRaw = Dest.INBOX.ordinal },
-                    )
+                    Dest.AGENT -> agentScreen()
+                    Dest.PROJECTS -> when {
+                        project == null -> ProjectsScreen { id -> projectId = id; projectChat = false }
+                        !projectChat -> ProjectPage(project) { projectChat = true }
+                        else -> agentScreen()
+                    }
                     Dest.INBOX -> InboxScreen(resumeTick)
                     Dest.MORE -> when (more) {
                         M_MEMORY -> MemoryScreen()
@@ -357,7 +366,7 @@ private fun AppHeader(title: String, back: (() -> Unit)? = null, onMenu: (() -> 
                     .border(1.dp, glowBorder(), RoundedCornerShape(50))
                     .background(Color.White.copy(alpha = 0.04f))
                     .clickable(onClick = onMenu)
-                    .semantics { contentDescription = "Меню: диалоги и проекты" },
+                    .semantics { contentDescription = "Меню: диалоги" },
                 contentAlignment = Alignment.Center,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

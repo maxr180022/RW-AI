@@ -35,7 +35,7 @@ import kotlinx.coroutines.delay
 /**
  * Строка «Не отвечено: N» на главном экране: сколько человек ждут ответа, а рядом по очереди меняются они сами
  * (кто, в каком приложении, когда написал; новые помечены). Только неотвеченные и новые. Нажатие открывает «Входящие».
- * Нет неотвеченных — строки нет совсем. Оформление из общих элементов приложения.
+ * Две строки: «Не отвечено: N · кто · где · когда» и текст сообщения. Только на главной (внутри проекта строки нет). Нет неотвеченных — строки нет совсем. Оформление из общих элементов приложения.
  */
 @Composable
 fun PendingStrip(items: List<PendingReply>, onOpen: () -> Unit) {
@@ -53,36 +53,31 @@ fun PendingStrip(items: List<PendingReply>, onOpen: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(shape).border(1.dp, glowBorder(), shape)
             .background(Color.White.copy(alpha = 0.04f)).clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // Ровно две строки. Первая: «Не отвечено: N · кто · где · когда» (меняется по очереди). Вторая: текст сообщения.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(RwPalette.Danger))
-            Text(PendingReplies.title(items.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(PendingReplies.title(items.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            Crossfade(targetState = current, modifier = Modifier.weight(1f), label = "pending-who") { p ->
+                Text(
+                    (if (p.isNew) "новое · " else "") + PendingReplies.line(p),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text("›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        // Вторая и третья строки: кто, где, когда и что написал. Меняется по очереди; высота не прыгает.
-        Crossfade(targetState = current, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), label = "pending") { p ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (p.isNew) Text("новое", style = MaterialTheme.typography.labelSmall, color = RwPalette.Blue, maxLines = 1)
-                    Text(
-                        PendingReplies.line(p),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (p.preview.isNotBlank()) {
-                    Text(
-                        p.preview,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
+        Crossfade(targetState = current, modifier = Modifier.fillMaxWidth(), label = "pending-text") { p ->
+            Text(
+                p.preview.ifBlank { " " },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
