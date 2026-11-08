@@ -23,4 +23,26 @@ class ReturnPolicyTest {
         assertEquals(ReturnAction.OWN_APP, d(mode = "app"))
         assertEquals(ReturnAction.NONE, d(mode = "stay"))
     }
+
+    @Test fun commandGivenInsideTheAppReturnsToTheAppNotToTheHomeScreen() {
+        // Раньше «откуда» брали как последнее чужое приложение (чаще рабочий стол): команда из Руся AI заканчивалась на рабочем столе.
+        val own = "com.rwai.agent"
+        val origin = ReturnPolicy.originFor(mainScreenOpen = true, own = own, detected = "com.sec.android.app.launcher")
+        assertEquals(own, origin)
+        assertEquals(
+            ReturnAction.OWN_APP,
+            ReturnPolicy.decide("origin", needsAnswer = false, spoken = false, origin = origin, current = "com.instagram.android", own = own, launcher = "com.sec.android.app.launcher", originIsBanking = false),
+        )
+    }
+
+    @Test fun commandFromAnAssistantPanelStillReturnsToTheAppUnderIt() {
+        val own = "com.rwai.agent"
+        val origin = ReturnPolicy.originFor(mainScreenOpen = false, own = own, detected = "com.whatsapp")
+        assertEquals("com.whatsapp", origin)
+        assertEquals(
+            ReturnAction.ORIGIN_APP,
+            ReturnPolicy.decide("origin", needsAnswer = false, spoken = false, origin = origin, current = "com.instagram.android", own = own, launcher = "launcher", originIsBanking = false),
+        )
+        assertEquals(null, ReturnPolicy.originFor(false, own, null))
+    }
 }
