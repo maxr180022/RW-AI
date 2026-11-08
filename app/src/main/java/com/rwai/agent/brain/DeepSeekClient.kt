@@ -39,6 +39,18 @@ class DeepSeekClient(
 
     override suspend fun complete(messages: List<ChatMessage>): String {
         val s = settings.current
+        return completeWith(messages, s.model, s.thinking)
+    }
+
+    /** Простая служебная работа (сводка, перевод, совет по телефону): лёгкая модель без рассуждения, если включён автовыбор. */
+    suspend fun completeLight(messages: List<ChatMessage>): String {
+        val s = settings.current
+        return if (s.autoModel) completeWith(messages, com.rwai.agent.settings.Settings.lightModelFor(s.model), false) else complete(messages)
+    }
+
+    /** Один запрос с явной моделью и режимом: так автовыбор ведёт простые задачи на лёгкой модели, а сложные на точной. */
+    suspend fun completeWith(messages: List<ChatMessage>, model: String, thinking: Boolean): String {
+        val s = settings.current
         val key = settings.apiKey() ?: throw ModelException("API-ключ DeepSeek не задан. Откройте «Настройки» и введите ключ.")
         if (s.dailyTokenCap > 0 && settings.tokensUsedToday() >= s.dailyTokenCap) {
             throw ModelException("Достигнут дневной лимит токенов (${s.dailyTokenCap}). Измените лимит в настройках.")
@@ -46,7 +58,7 @@ class DeepSeekClient(
         val totalChars = messages.sumOf { it.content.length }
         if (totalChars > MAX_REQUEST_CHARS) throw ModelException("Запрос слишком большой ($totalChars символов).")
 
-        val body = buildBody(s.model, s.thinking, messages)
+        val body = buildBody(model, thinking, messages)
         var attempt = 0
         var lastError: ModelException? = null
         while (attempt <= MAX_RETRIES) {

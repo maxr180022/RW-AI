@@ -3,7 +3,6 @@ package com.rwai.agent.settings
 import android.content.Context
 import com.rwai.agent.logic.AutonomyMode
 import com.rwai.agent.logic.Endpoint
-import com.rwai.agent.logic.SpeedProfile
 import com.rwai.agent.security.SecretStore
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -14,7 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 data class Settings(
     val baseUrl: String = DEFAULT_BASE_URL,
     val model: String = DEFAULT_MODEL,
-    val thinking: Boolean = false, // по умолчанию выключено: рассуждение замедляет каждый шаг агента в разы (см. SpeedProfile)
+    /** Режим рассуждения для сложных задач (точнее, но медленнее). Простые задачи при автовыборе идут без него. */
+    val thinking: Boolean = true,
+    /** Автовыбор модели: простое — быстрая лёгкая модель, сложное и неясное — выбранная модель с рассуждением (см. TaskComplexity). */
+    val autoModel: Boolean = true,
     val mode: AutonomyMode = AutonomyMode.ASSISTANT,
     val autoSend: Boolean = false,
     /** BCP-47: ru-RU, es-UY, es-ES, en-US */
@@ -63,6 +65,9 @@ data class Settings(
         // Названия моделей взяты из документации DeepSeek (api-docs.deepseek.com) на 2026-11-07. Поле редактируемое.
         const val DEFAULT_MODEL = "deepseek-flash"
         val KNOWN_MODELS = listOf("deepseek-flash", "deepseek-v4-pro")
+
+        /** Лёгкая модель для простых задач. Если владелец указал свою (не из списка), лёгкой отдельной нет: остаётся его модель. */
+        fun lightModelFor(strong: String): String = if (strong in KNOWN_MODELS) DEFAULT_MODEL else strong
     }
 }
 
@@ -79,14 +84,15 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
 
     private fun load(): Settings {
         val d = Settings()
-        // Профиль скорости (0.5.9): один раз выключаем рассуждение на уже настроенных телефонах; включить обратно можно в «Настройки».
-        if (!prefs.getBoolean("speed_profile_1", false)) {
-            prefs.edit().putBoolean("thinking", SpeedProfile.thinkingAfterMigration(false, true)).putBoolean("speed_profile_1", true).apply()
+        // Автовыбор модели (0.6.1): рассуждение для сложных задач возвращается (в 0.5.9 оно было выключено для всех). Один раз.
+        if (!prefs.getBoolean("auto_model_1", false)) {
+            prefs.edit().putBoolean("thinking", true).putBoolean("auto_model_1", true).apply()
         }
         return Settings(
             baseUrl = Endpoint.normalize(prefs.getString("baseUrl", d.baseUrl) ?: d.baseUrl) ?: d.baseUrl,
             model = prefs.getString("model", d.model)?.takeIf { it.isNotBlank() } ?: d.model,
-            thinking = SpeedProfile.thinkingAfterMigration(prefs.getBoolean("speed_profile_1", false), prefs.getBoolean("thinking", d.thinking)),
+            thinking = prefs.getBoolean("thinking", d.thinking),
+            autoModel = prefs.getBoolean("autoModel", d.autoModel),
             mode = AutonomyMode.fromName(prefs.getString("mode", d.mode.name)),
             autoSend = prefs.getBoolean("autoSend", d.autoSend),
             language = prefs.getString("language", d.language) ?: d.language,
@@ -114,7 +120,7 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
     fun update(transform: (Settings) -> Settings) {
         val s = transform(_state.value)
         prefs.edit()
-            .putString("baseUrl", s.baseUrl).putString("model", s.model).putBoolean("thinking", s.thinking)
+            .putString("baseUrl", s.baseUrl).putString("model", s.model).putBoolean("thinking", s.thinking).putBoolean("autoModel", s.autoModel)
             .putString("mode", s.mode.name).putBoolean("autoSend", s.autoSend).putString("language", s.language)
             .putBoolean("speakResults", s.speakResults).putBoolean("voiceAutoRun", s.voiceAutoRun)
             .putInt("retentionDays", s.retentionDays).putBoolean("captureNotifications", s.captureNotifications)

@@ -241,7 +241,10 @@ fun SettingsScreen() {
                 FilterChip(selected = modelInput == m, onClick = { modelInput = m }, label = { Text(m) })
             }
         }
-        SwitchRow("Режим рассуждения (thinking)", "Точнее планирует, но каждый шаг в разы медленнее и расходует больше токенов. По умолчанию выключено: так агент быстрее ходит по телефону.", settings.thinking) { v ->
+        SwitchRow("Автовыбор модели", "Простые задачи (открыть, показать, найти) идут на быстрой модели, сложные (ответ человеку, документ, несколько шагов, юридическое, деньги) и всё неясное на выбранной модели с рассуждением. Точность важнее скорости.", settings.autoModel) { v ->
+            Graph.settings.update { it.copy(autoModel = v) }
+        }
+        SwitchRow("Режим рассуждения (thinking)", "Для сложных задач: точнее планирует, но каждый шаг медленнее и расходует больше токенов. При автовыборе простые задачи идут без него.", settings.thinking) { v ->
             Graph.settings.update { it.copy(thinking = v) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
