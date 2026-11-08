@@ -33,6 +33,9 @@ class RwAccessibilityService : AccessibilityService() {
     var lastForegroundPackage: String? = null
         private set
 
+    @Volatile
+    private var lastExternalPackage: String? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
