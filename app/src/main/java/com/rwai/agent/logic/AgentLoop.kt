@@ -241,6 +241,7 @@ class AgentLoop(
                             "input_text" -> typed = call.str("text")
                             "show_draft" -> { recipient = call.str("recipient"); typed = call.str("text") }
                         }
+                        if (ConfirmationPolicy.isSendTap(call)) sink.record(ActivityEvent("sent", call.tool, "", "ok")) // карточка черновика получит статус «Отправлено»
                         if (call.tool == "inspect_screen" || call.tool == "find_text") needsVerification = false
                     }
 

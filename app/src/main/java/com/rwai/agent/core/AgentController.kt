@@ -42,7 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-data class Draft(val recipient: String, val app: String, val text: String)
+/** Черновик сообщения на экране. sentAt — когда агент нажал «Отправить»: карточка показывает «Отправлено» и время. */
+data class Draft(val recipient: String, val app: String, val text: String, val sentAt: Long? = null)
 
 enum class ChatRole { USER, AGENT, SYSTEM, ERROR }
 
@@ -435,6 +436,7 @@ class AgentController(
         val redact: (String) -> String = { com.rwai.agent.logic.ProfileTemplates.redact(SecretRedactor.redact(it, secrets()), profileValues) }
         val sink = ActivitySink { e ->
             if (e.kind == "tool" && e.tool in APP_SWITCHING_TOOLS && !e.status.startsWith("denied")) movedApps = true
+            if (e.kind == "sent") markSent()
             try { db.logActivity(taskId, e.kind, e.tool, redact(e.detail), e.status) } catch (_: Exception) { }
             pushStep(e, redact)
         }
@@ -585,6 +587,16 @@ class AgentController(
         val now = System.currentTimeMillis()
         _state.update { it.copy(chat = (it.chat + ChatEntry(role, text, ts = now, thumbs = thumbs, files = files)).takeLast(200)) }
         persist(role, text, now)
+    }
+
+    /** Агент нажал «Отправить»: карточка черновика становится «Отправлено · время», а в диалог пишется строка с адресатом и временем. */
+    private fun markSent() {
+        val d = _state.value.draft
+        if (d?.sentAt != null) return // повторное нажатие в той же задаче не плодит записей
+        val now = System.currentTimeMillis()
+        _state.update { it.copy(draft = it.draft?.copy(sentAt = now)) }
+        val to = d?.let { " " + it.recipient.ifBlank { "адресату" } + (if (it.app.isNotBlank()) " · ${it.app}" else "") }.orEmpty()
+        addChat(ChatRole.SYSTEM, "Отправлено$to · " + SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(now)))
     }
 
     private fun pushStep(e: ActivityEvent, redact: (String) -> String) {

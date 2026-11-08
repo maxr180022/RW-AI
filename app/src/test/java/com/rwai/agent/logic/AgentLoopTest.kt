@@ -99,6 +99,38 @@ class AgentLoopTest {
         assertTrue(out is AgentOutcome.Failed)
     }
 
+    @Test fun pressingSendReportsSentSoTheDraftCardCanChangeStatus() = runBlocking {
+        val events = Events()
+        val model = ScriptedModel(
+            listOf(
+                act("show_draft", """{"recipient":"Автосервис","app":"Gmail","text":"Приеду в понедельник"}"""),
+                act("input_text", """{"text":"Приеду в понедельник"}"""),
+                act("tap_text", """{"text":"Отправить"}"""),
+                act("inspect_screen"),
+                finish(true, "Отправлено"),
+            ),
+        )
+        loop(model, FakeExecutor(), FakeConfirmer(true), events).run("Напиши в автосервис")
+        assertEquals(1, events.list.count { it.kind == "sent" })
+        // событие «отправлено» приходит только после успешного нажатия, а не при показе черновика
+        val order = events.list.map { if (it.kind == "sent") "sent" else it.tool.orEmpty() }
+        assertTrue(order.indexOf("sent") > order.indexOf("tap_text"))
+    }
+
+    @Test fun declinedOrOtherTapsNeverReportSent() = runBlocking {
+        // отказ в подтверждении: кнопка не нажималась — «отправлено» быть не должно
+        val declined = Events()
+        loop(
+            ScriptedModel(listOf(act("input_text", """{"text":"Привет"}"""), act("tap_text", """{"text":"Отправить"}"""), finish(false, "Отменено"))),
+            FakeExecutor(), FakeConfirmer(false), declined,
+        ).run("напиши")
+        assertEquals(0, declined.list.count { it.kind == "sent" })
+        // обычное нажатие не отправка
+        val other = Events()
+        loop(ScriptedModel(listOf(act("tap_text", """{"text":"Назад"}"""), finish())), FakeExecutor(), FakeConfirmer(true), other).run("назад")
+        assertEquals(0, other.list.count { it.kind == "sent" })
+    }
+
     @Test fun sendNeedsConfirmationShowsFullTextAndForcesVerification() = runBlocking {
         val model = ScriptedModel(
             listOf(

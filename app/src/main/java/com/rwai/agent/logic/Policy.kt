@@ -84,6 +84,9 @@ class ConfirmationPolicy(
         fun isDangerousLabel(label: String): Boolean = dangerous.containsMatchIn(label)
         fun isSendLabel(label: String): Boolean = send.containsMatchIn(label)
         fun isUserOnlyLabel(label: String): Boolean = userOnly.containsMatchIn(label)
+
+        /** Нажатие кнопки отправки сообщения («Отправить», «Send», «Enviar»…). */
+        fun isSendTap(call: ToolCall): Boolean = call.tool == "tap_text" && isSendLabel(call.str("text").orEmpty())
     }
 
     /** Приложения, в которых владелец уже разрешил ввод данных профиля в этой задаче. */

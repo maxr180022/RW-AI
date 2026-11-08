@@ -361,12 +361,22 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                     var editing by remember(d) { mutableStateOf(false) }
                     var editText by remember(d) { mutableStateOf(d.text) }
                     var rewrite by remember(d) { mutableStateOf("") }
-                    val idle = state.phase == Phase.IDLE
+                    val sentAt = d.sentAt
+                    val idle = state.phase == Phase.IDLE && sentAt == null
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Черновик · ${d.app} → ${d.recipient}", style = MaterialTheme.typography.titleSmall)
+                            if (sentAt != null) {
+                                // Сообщение уже отправлено: карточка больше не выглядит как черновик, видно кому, куда и когда.
+                                Text(
+                                    "Отправлено · ${d.app} → ${d.recipient} · " + java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(sentAt)),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = RwPalette.Success,
+                                )
+                            } else {
+                                Text("Черновик · ${d.app} → ${d.recipient}", style = MaterialTheme.typography.titleSmall)
+                            }
                             if (!editing) {
-                                Text(d.text)
+                                Text(d.text, color = if (sentAt != null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else Color.Unspecified)
                                 // «Отправить» здесь и есть подтверждение: второе окно для этого текста не показывается.
                                 if (idle) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     ActionPill("Отправить", accent = true) { Graph.controller.sendDraft(d.text) }
