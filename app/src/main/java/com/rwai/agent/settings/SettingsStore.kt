@@ -155,4 +155,29 @@ class SettingsStore(context: Context, private val secrets: SecretStore) {
         val used = tokensUsedToday() + n.coerceAtLeast(0)
         prefs.edit().putString("tokensDay", today()).putInt("tokensUsed", used).apply()
     }
+
+    /** Расход токенов по источникам за сутки (агент, перевод, сводки…): нужен, чтобы видеть, что именно тратит токены. */
+    @Synchronized
+    fun addUsage(source: String, total: Int, prompt: Int, cached: Int) {
+        addTokens(total)
+        val src = if (source in com.rwai.agent.logic.UsageView.SOURCES) source else "other"
+        val ed = prefs.edit()
+        if (prefs.getString("usageDay", "") != today()) {
+            for (k in com.rwai.agent.logic.UsageView.SOURCES) ed.remove("u_" + k + "_t").remove("u_" + k + "_p").remove("u_" + k + "_c")
+            ed.putString("usageDay", today())
+            ed.apply()
+            return addUsage(src, total, prompt, cached)
+        }
+        ed.putInt("u_" + src + "_t", prefs.getInt("u_" + src + "_t", 0) + total.coerceAtLeast(0))
+            .putInt("u_" + src + "_p", prefs.getInt("u_" + src + "_p", 0) + prompt.coerceAtLeast(0))
+            .putInt("u_" + src + "_c", prefs.getInt("u_" + src + "_c", 0) + cached.coerceAtLeast(0))
+            .apply()
+    }
+
+    fun usageToday(): List<com.rwai.agent.logic.UsageLine> {
+        if (prefs.getString("usageDay", "") != today()) return emptyList()
+        return com.rwai.agent.logic.UsageView.SOURCES.map {
+            com.rwai.agent.logic.UsageLine(it, prefs.getInt("u_" + it + "_t", 0), prefs.getInt("u_" + it + "_p", 0), prefs.getInt("u_" + it + "_c", 0))
+        }
+    }
 }

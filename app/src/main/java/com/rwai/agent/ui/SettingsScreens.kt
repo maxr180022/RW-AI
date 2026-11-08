@@ -198,6 +198,7 @@ fun SettingsScreen() {
     var confirmWipe by remember { mutableStateOf(false) }
     var confirmDeleteKey by remember { mutableStateOf(false) }
     var tokensToday by remember { mutableStateOf(Graph.settings.tokensUsedToday()) }
+    var usage by remember { mutableStateOf(Graph.settings.usageToday()) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SectionTitle("DeepSeek")
@@ -355,7 +356,8 @@ fun SettingsScreen() {
         SectionTitle("Расход токенов")
         var cap by remember(settings.dailyTokenCap) { mutableStateOf(settings.dailyTokenCap.toString()) }
         Text("Сегодня использовано токенов: $tokensToday", style = MaterialTheme.typography.bodyMedium)
-        OutlinedButton(onClick = { tokensToday = Graph.settings.tokensUsedToday() }) { Text("Обновить счётчик") }
+        com.rwai.agent.logic.UsageView.lines(usage).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        OutlinedButton(onClick = { tokensToday = Graph.settings.tokensUsedToday(); usage = Graph.settings.usageToday() }) { Text("Обновить счётчик") }
         OutlinedTextField(
             value = cap,
             onValueChange = { v ->

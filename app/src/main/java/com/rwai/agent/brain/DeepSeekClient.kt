@@ -39,17 +39,17 @@ class DeepSeekClient(
 
     override suspend fun complete(messages: List<ChatMessage>): String {
         val s = settings.current
-        return completeWith(messages, s.model, s.thinking)
+        return completeWith(messages, s.model, s.thinking, "agent")
     }
 
     /** Простая служебная работа (сводка, перевод, совет по телефону): лёгкая модель без рассуждения, если включён автовыбор. */
-    suspend fun completeLight(messages: List<ChatMessage>): String {
+    suspend fun completeLight(messages: List<ChatMessage>, source: String = "other"): String {
         val s = settings.current
-        return if (s.autoModel) completeWith(messages, com.rwai.agent.settings.Settings.lightModelFor(s.model), false) else complete(messages)
+        return if (s.autoModel) completeWith(messages, com.rwai.agent.settings.Settings.lightModelFor(s.model), false, source) else completeWith(messages, s.model, s.thinking, source)
     }
 
     /** Один запрос с явной моделью и режимом: так автовыбор ведёт простые задачи на лёгкой модели, а сложные на точной. */
-    suspend fun completeWith(messages: List<ChatMessage>, model: String, thinking: Boolean): String {
+    suspend fun completeWith(messages: List<ChatMessage>, model: String, thinking: Boolean, source: String = "agent"): String {
         val s = settings.current
         val key = settings.apiKey() ?: throw ModelException("API-ключ DeepSeek не задан. Откройте «Настройки» и введите ключ.")
         if (s.dailyTokenCap > 0 && settings.tokensUsedToday() >= s.dailyTokenCap) {
@@ -65,7 +65,7 @@ class DeepSeekClient(
             if (attempt > 0) delay(1000L * (1L shl (attempt - 1)))
             attempt++
             try {
-                return doRequest(s.baseUrl, key, body)
+                return doRequest(s.baseUrl, key, body, source = source)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ModelException) {
@@ -134,7 +134,7 @@ class DeepSeekClient(
         return Json.stringify(map)
     }
 
-    private suspend fun doRequest(baseUrl: String, key: String, body: String, countTokens: Boolean = true): String {
+    private suspend fun doRequest(baseUrl: String, key: String, body: String, countTokens: Boolean = true, source: String = "other"): String {
         val request = Request.Builder()
             .url("$baseUrl/chat/completions")
             .header("Authorization", "Bearer $key")
@@ -157,8 +157,10 @@ class DeepSeekClient(
                 null
             } ?: throw ModelException("DeepSeek вернул ответ в неожиданном формате.", retryable = true)
             if (countTokens) {
-                val total = (parsed["usage"].asJsonMap()?.get("total_tokens") as? Long)?.toInt() ?: 0
-                if (total > 0) settings.addTokens(total)
+                val usage = parsed["usage"].asJsonMap()
+                fun n(key: String): Int = (usage?.get(key) as? Long)?.toInt() ?: 0
+                val total = n("total_tokens")
+                if (total > 0) settings.addUsage(source, total, n("prompt_tokens"), n("prompt_cache_hit_tokens"))
             }
             val choice = parsed["choices"].asJsonList()?.firstOrNull().asJsonMap()
                 ?: throw ModelException("DeepSeek вернул пустой список ответов.", retryable = true)

@@ -151,7 +151,7 @@ class AgentLoop(
 
             onStatus("Думаю…")
             val raw = try {
-                model.complete(listOf(ChatMessage.system(systemPrompt)) + trim(history))
+                model.complete(listOf(ChatMessage.system(systemPrompt)) + trim(HistoryCompaction.shrinkOldScreens(history)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ModelException) {
