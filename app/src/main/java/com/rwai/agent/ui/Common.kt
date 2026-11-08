@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -94,6 +95,48 @@ private enum class Dest(val title: String, val icon: Int) {
     SETTINGS("Ещё", R.drawable.ic_nav_more),
 }
 
+/** Команда, подготовленная на другом экране (например, «Ответить» во «Входящих»): попадает в поле ввода агента. */
+object AgentPrefill {
+    val text = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+}
+
+/** Текст с лёгким Markdown: **жирное** выделяется шрифтом, звёздочки не показываются. */
+@Composable
+fun MdText(text: String, modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium, color: Color = Color.Unspecified) {
+    val annotated = androidx.compose.ui.text.buildAnnotatedString {
+        for ((part, bold) in com.rwai.agent.logic.Md.spans(text)) {
+            if (bold) withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) { append(part) } else append(part)
+        }
+    }
+    Text(annotated, modifier = modifier, style = style, color = color)
+}
+
+/** Стеклянная карточка с тонкой светящейся рамкой. */
+@Composable
+fun GlassCard(modifier: Modifier = Modifier, accent: Color? = null, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier.fillMaxWidth().clip(shape)
+            .background(Color.White.copy(alpha = 0.055f))
+            .border(1.dp, if (accent != null) Brush.linearGradient(listOf(accent.copy(alpha = 0.7f), accent.copy(alpha = 0.2f))) else glowBorder(), shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+        content = content,
+    )
+}
+
+/** Маленькая кнопка‑«таблетка» для действий в карточках. */
+@Composable
+fun ActionPill(text: String, accent: Boolean = false, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier.clip(shape)
+            .then(if (accent) Modifier.background(accentBrush()) else Modifier.background(Color.White.copy(alpha = 0.08f)).border(1.dp, Color.White.copy(alpha = 0.14f), shape))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    ) { Text(text, style = MaterialTheme.typography.labelMedium, color = Color.White) }
+}
+
 @Composable
 fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
     val hasKey by Graph.settings.hasApiKey.collectAsState()
@@ -109,12 +152,14 @@ fun RwRoot(resumeTick: Int, voiceTick: Int = 0) {
 
     // Жест ассистента или «Поделиться» из Галереи всегда ведут на вкладку «Агент».
     val shared by IncomingShare.uris.collectAsState()
-    LaunchedEffect(voiceTick, shared) {
-        if (voiceTick > 0 || shared.isNotEmpty()) tab = Dest.AGENT.ordinal
+    val prefill by AgentPrefill.text.collectAsState()
+    LaunchedEffect(voiceTick, shared, prefill) {
+        if (voiceTick > 0 || shared.isNotEmpty() || prefill != null) tab = Dest.AGENT.ordinal
     }
 
     Scaffold(
         containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.background(MaterialTheme.colorScheme.background).neuralGlow(),
         bottomBar = { RwBottomBar(selected = tab, onSelect = { tab = it }) },
     ) { padding ->
@@ -222,7 +267,7 @@ private fun AppHeader(title: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        BrandMark(32.dp)
+        LogoMark(34.dp)
         Text(
             "Руся AI",
             style = MaterialTheme.typography.titleLarge.copy(brush = brandBrush()),
@@ -238,6 +283,16 @@ private fun AppHeader(title: String) {
             Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
+}
+
+/** Логотип с вырезанным фоном (на тёмном экране, без плашки). */
+@Composable
+fun LogoMark(size: Dp, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.rw_mark),
+        contentDescription = "Руся AI",
+        modifier = modifier.size(size),
+    )
 }
 
 /** Логотип приложения на белой скруглённой плашке. */

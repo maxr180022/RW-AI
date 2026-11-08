@@ -99,3 +99,36 @@ class PhraseFinderTest {
         assertTrue(PhraseFinder.find(emptyList(), "x").isEmpty())
     }
 }
+
+class DigestViewTest {
+    private val sample = """
+- **taisiialook (Instagram):** отметила вас в истории; ссорится с Натин
+- **maxr180022 (Gmail, пересказ с англ.):** сборка APK упала
+- **Ждут ответа:** по сути никто
+- **Срочно:** сломанная сборка APK — её надо чинить.
+- **Договорённости (дата, время, сумма):** не указаны
+""".trimIndent()
+
+    @Test fun parsesIntoCardsWithoutStars() {
+        val r = DigestView.parse(sample)
+        assertEquals(4, r.size) // «не указаны» убрано
+        assertEquals(DigestKind.PERSON, r[0].kind)
+        assertEquals("taisiialook" to "Instagram", r[0].person())
+        assertEquals("maxr180022" to "Gmail", r[1].person())
+        assertEquals(DigestKind.WAITING, r[2].kind)
+        assertEquals(DigestKind.URGENT, r[3].kind)
+        assertTrue(r.none { it.body.contains("*") || (it.title ?: "").contains("*") })
+    }
+
+    @Test fun continuationLinesJoin() {
+        val r = DigestView.parse("- **Иван (Telegram):** первая часть\nпродолжение")
+        assertEquals(1, r.size)
+        assertEquals("первая часть продолжение", r[0].body)
+    }
+
+    @Test fun mdSpansAndStrip() {
+        assertEquals(listOf("Итог: " to true, "готово" to false), Md.spans("**Итог: **готово").map { it.first.let { s -> if (s == "Итог: ") s else s } to it.second })
+        assertEquals("• пункт жирный", Md.strip("- пункт **жирный**"))
+        assertEquals("Заголовок", Md.strip("## Заголовок"))
+    }
+}

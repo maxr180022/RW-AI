@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -94,21 +95,9 @@ fun InboxScreen(resumeTick: Int) {
                     OutlinedButton(onClick = { refresh++ }) { Text("Обновить") }
                 }
                 if (busy) CircularProgressIndicator()
-                if (summary == null) {
-                    com.rwai.agent.digest.DigestManager.lastDigest()?.let { (ts, t) ->
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Последняя сводка · " + dateFmt.format(Date(ts)), style = MaterialTheme.typography.labelMedium)
-                                Text(t)
-                            }
-                        }
-                    }
-                }
-                summary?.let {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                        Text(it, modifier = Modifier.padding(12.dp))
-                    }
-                }
+                val digestText: Pair<Long?, String>? = summary?.let { null to it }
+                    ?: com.rwai.agent.digest.DigestManager.lastDigest()?.let { (ts, t) -> ts to t }
+                digestText?.let { (ts, t) -> DigestCards(ts, t) }
                 Text(
                     "Показано ${rows.size} уведомлений. Приложения скрывают часть содержимого — Руся AI показывает только то, что отдала система.",
                     style = MaterialTheme.typography.bodySmall,
@@ -121,14 +110,76 @@ fun InboxScreen(resumeTick: Int) {
 }
 
 @Composable
+private fun DigestCards(ts: Long?, text: String) {
+    val items = remember(text) { com.rwai.agent.logic.DigestView.parse(text) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Сводка" + (ts?.let { " · " + dateFmt.format(Date(it)) } ?: ""),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (items.isEmpty()) {
+            GlassCard { MdText(text) }
+        }
+        items.forEach { it0 ->
+            val (accent, tag) = when (it0.kind) {
+                com.rwai.agent.logic.DigestKind.URGENT -> Color(0xFFFF4D6D) to "Срочно"
+                com.rwai.agent.logic.DigestKind.WAITING -> Color(0xFFFFB020) to "Ждут ответа"
+                com.rwai.agent.logic.DigestKind.DEAL -> Color(0xFF2ECC8F) to "Договорённости"
+                com.rwai.agent.logic.DigestKind.PERSON -> RwPalette.Blue to "Сообщение"
+                com.rwai.agent.logic.DigestKind.NOTE -> RwPalette.Violet to "Заметка"
+            }
+            GlassCard(accent = accent) {
+                Text(tag.uppercase(), style = MaterialTheme.typography.labelSmall, color = accent)
+                val head = it0.title?.takeIf { t -> t.isNotBlank() && !t.equals(tag, true) }
+                if (head != null) Text(head, style = MaterialTheme.typography.titleSmall)
+                if (it0.body.isNotBlank()) MdText(it0.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f))
+                val who = it0.person()
+                val actions = buildList<Pair<String, String>> {
+                    when (it0.kind) {
+                        com.rwai.agent.logic.DigestKind.PERSON ->
+                            if (who != null) add("Ответить" to "Подготовь ответ для ${who.first}" + (who.second?.let { a -> " в $a" } ?: "") + " по последним сообщениям и покажи черновик, не отправляй.")
+                        com.rwai.agent.logic.DigestKind.WAITING -> add("Ответить" to "Кому нужно ответить сейчас? Подготовь короткие ответы и покажи черновики.")
+                        com.rwai.agent.logic.DigestKind.URGENT -> add("Разобраться" to "Помоги разобраться: ${it0.body.take(200)}")
+                        com.rwai.agent.logic.DigestKind.DEAL -> add("В календарь" to "Добавь в календарь: ${it0.body.take(200)}")
+                        else -> {}
+                    }
+                }
+                if (actions.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        actions.forEach { (label, cmd) -> ActionPill(label, accent = true) { AgentPrefill.text.value = cmd } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun NotificationItem(r: NotificationRow) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text("${r.app} · ${dateFmt.format(Date(r.ts))}", style = MaterialTheme.typography.labelMedium)
-            val who = r.sender ?: r.title
-            if (!who.isNullOrBlank()) Text(who, style = MaterialTheme.typography.titleSmall)
-            Text(if (r.hidden) "[содержимое скрыто приложением]" else (r.body ?: ""), style = MaterialTheme.typography.bodyMedium)
-            if (!r.tr.isNullOrBlank()) Text("↳ " + r.tr, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+    val ctx = LocalContext.current
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                r.app.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = RwPalette.Blue,
+                modifier = Modifier.weight(1f),
+            )
+            Text(dateFmt.format(Date(r.ts)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val who = r.sender ?: r.title
+        if (!who.isNullOrBlank()) Text(who, style = MaterialTheme.typography.titleSmall)
+        Text(if (r.hidden) "[содержимое скрыто приложением]" else (r.body ?: ""), style = MaterialTheme.typography.bodyMedium)
+        if (!r.tr.isNullOrBlank()) Text("↳ " + r.tr, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        if (!r.hidden && !who.isNullOrBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                ActionPill("Ответить", accent = true) { AgentPrefill.text.value = "Ответь $who в ${r.app}: " }
+                ActionPill("Открыть") {
+                    val i = ctx.packageManager.getLaunchIntentForPackage(r.pkg)
+                    if (i != null) ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }
         }
     }
 }

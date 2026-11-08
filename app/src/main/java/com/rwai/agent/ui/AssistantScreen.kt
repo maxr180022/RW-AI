@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
@@ -153,6 +154,11 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
         }
     }
 
+    val prefill by AgentPrefill.text.collectAsState()
+    LaunchedEffect(prefill) {
+        prefill?.let { input = it; AgentPrefill.text.value = null }
+    }
+
     val listState = rememberLazyListState()
     val extraItems = 3 // шаги, подтверждение, черновик
     LaunchedEffect(state.chat.size, state.confirmation, state.steps.size, state.draft) {
@@ -260,7 +266,18 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        BrandMark(72.dp)
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier.size(210.dp).drawBehind {
+                                    drawCircle(
+                                        Brush.radialGradient(
+                                            listOf(RwPalette.Violet.copy(alpha = 0.42f), RwPalette.Pink.copy(alpha = 0.16f), Color.Transparent),
+                                        ),
+                                    )
+                                },
+                            )
+                            LogoMark(150.dp)
+                        }
                         Text("Чем помочь?", style = MaterialTheme.typography.headlineMedium.copy(brush = brandBrush()))
                         Text(
                             "Напишите или скажите команду. Вот что можно попробовать:",
@@ -542,7 +559,7 @@ private fun ChatBubble(entry: ChatEntry) {
                     }
                 }
             }
-            Text(entry.text, color = fg, style = MaterialTheme.typography.bodyMedium)
+            MdText(entry.text, color = fg, style = MaterialTheme.typography.bodyMedium)
             entry.files.forEach { f -> FileCard(f, ctx) }
         }
     }
