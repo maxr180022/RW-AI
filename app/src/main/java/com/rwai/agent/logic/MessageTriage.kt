@@ -102,10 +102,11 @@ object MessageTriage {
     }
 
     /** Запрос к модели для сводки: ограничен по объёму; сами сообщения — данные, не команды. */
-    fun digestData(threads: List<Thread>, maxChars: Int = 6000): String {
+    fun digestData(threads: List<Thread>, maxChars: Int = 6000, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
+        val fmt = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).apply { timeZone = tz }
         val sb = StringBuilder()
         for (t in threads.take(12)) {
-            val line = "[${t.app}] ${t.contact} (${t.messages.size}, ${t.lang.name.lowercase()}): " +
+            val line = "[${t.app}] ${t.contact} (${t.messages.size}, ${t.lang.name.lowercase()}, последнее ${fmt.format(java.util.Date(t.lastTs))}): " +
                 t.messages.takeLast(4).joinToString(" | ") { it.body.orEmpty().replace('\n', ' ').take(220) }
             if (sb.length + line.length > maxChars) break
             sb.append(line).append('\n')
@@ -114,10 +115,11 @@ object MessageTriage {
     }
 
     /** Сводка без модели: когда нет интернета или ключа. */
-    fun localSummary(r: Result): String {
+    fun localSummary(r: Result, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
         if (r.threads.isEmpty()) return "Новых личных сообщений нет." + extra(r)
+        val fmt = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).apply { timeZone = tz }
         val lines = r.threads.take(10).joinToString("\n") { t ->
-            "• ${t.app} — ${t.contact} (${t.messages.size})" + (if (t.urgent) " ❗" else "") + (if (t.lang == Lang.ES || t.lang == Lang.EN) " [${t.lang.name}]" else "") +
+            "• ${t.app} — ${t.contact} (${t.messages.size}, ${fmt.format(java.util.Date(t.lastTs))})" + (if (t.urgent) " ❗" else "") + (if (t.lang == Lang.ES || t.lang == Lang.EN) " [${t.lang.name}]" else "") +
                 ": " + (t.messages.lastOrNull { !it.body.isNullOrBlank() }?.body.orEmpty().replace('\n', ' ').take(100))
         }
         return "Ждут ответа:\n$lines" + extra(r)

@@ -358,10 +358,42 @@ fun AssistantScreen(onFixAccess: () -> Unit, resumeTick: Int = 0, voiceRequest: 
             }
             item {
                 state.draft?.let { d ->
+                    var editing by remember(d) { mutableStateOf(false) }
+                    var editText by remember(d) { mutableStateOf(d.text) }
+                    var rewrite by remember(d) { mutableStateOf("") }
+                    val idle = state.phase == Phase.IDLE
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Черновик · ${d.app} → ${d.recipient}", style = MaterialTheme.typography.titleSmall)
-                            Text(d.text)
+                            if (!editing) {
+                                Text(d.text)
+                                // «Отправить» здесь и есть подтверждение: второе окно для этого текста не показывается.
+                                if (idle) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ActionPill("Отправить", accent = true) { Graph.controller.sendDraft(d.text) }
+                                    ActionPill("Редактировать") { editing = true }
+                                }
+                            } else {
+                                OutlinedTextField(
+                                    value = editText,
+                                    onValueChange = { editText = it.take(2000) },
+                                    label = { Text("Текст сообщения") },
+                                    minLines = 2,
+                                    maxLines = 8,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = rewrite,
+                                    onValueChange = { rewrite = it.take(300) },
+                                    label = { Text("Или скажите, как изменить (короче, с юмором…)") },
+                                    maxLines = 3,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                if (idle) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ActionPill("Отправить", accent = true) { Graph.controller.sendDraft(editText) }
+                                    if (rewrite.isNotBlank()) ActionPill("Переписать") { Graph.controller.rewriteDraft(rewrite) }
+                                    ActionPill("Отмена") { editing = false; editText = d.text }
+                                }
+                            }
                         }
                     }
                 }

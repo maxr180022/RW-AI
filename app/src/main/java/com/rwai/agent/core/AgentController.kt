@@ -7,6 +7,8 @@ import com.rwai.agent.data.ProjectRow
 import com.rwai.agent.data.RwDb
 import com.rwai.agent.executor.AndroidToolExecutor
 import com.rwai.agent.logic.ActivityEvent
+import com.rwai.agent.logic.ApprovedSend
+import com.rwai.agent.logic.SendApproval
 import com.rwai.agent.logic.ActivitySink
 import com.rwai.agent.logic.AgentLoop
 import com.rwai.agent.logic.AgentOutcome
@@ -101,6 +103,9 @@ class AgentController(
     /** Приложение, из которого дана команда: туда агент вернёт владельца после задачи. */
     @Volatile private var originPkg: String? = null
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
+
+    /** Отправка, одобренная кнопкой на карточке черновика. Живёт только в задаче, запущенной этой кнопкой, и расходуется один раз. */
+    @Volatile private var approvedSend: ApprovedSend? = null
     private var pendingQuestion: Pair<String, String>? = null
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
@@ -349,8 +354,30 @@ class AgentController(
     }
 
     fun stop() {
+        approvedSend = null
         pendingConfirm?.complete(false)
         job?.cancel()
+    }
+
+    /**
+     * Кнопка «Отправить» на карточке черновика. Владелец видит точный текст и адресата, так что это и есть подтверждение:
+     * второе окно для этого же текста не показывается (см. [SendApproval]). Любой другой текст или адресат — обычное подтверждение.
+     */
+    @Synchronized
+    fun sendDraft(text: String) {
+        val d = _state.value.draft ?: return
+        if (job?.isActive == true || text.isBlank()) return
+        val ok = ApprovedSend(d.recipient, d.app, text)
+        approvedSend = ok
+        submit(SendApproval.sendTask(ok))
+        if (job?.isActive != true) approvedSend = null // задача не запустилась (например, нет ключа): одобрение не остаётся висеть
+    }
+
+    /** «Перепиши черновик»: агент покажет новый черновик и ничего не отправит. */
+    @Synchronized
+    fun rewriteDraft(instruction: String) {
+        val d = _state.value.draft ?: return
+        SendApproval.rewriteTask(ApprovedSend(d.recipient, d.app, d.text), instruction)?.let { submit(it) }
     }
 
     fun resolveConfirmation(approved: Boolean) {
@@ -475,6 +502,7 @@ class AgentController(
             if (speakNow) try { say("Произошла внутренняя ошибка.") } catch (_: Throwable) { }
             setIdle("Ошибка")
         } finally {
+            approvedSend = null
             withContext(NonCancellable) {
                 delay(800) // не останавливаем службу раньше, чем она успела перейти в foreground
                 AgentService.stop(appContext)
@@ -485,6 +513,13 @@ class AgentController(
 
     private inner class UiConfirmer : Confirmer {
         override suspend fun confirm(req: ConfirmationRequest): Boolean {
+            approvedSend?.let { ok ->
+                if (SendApproval.matches(req, ok)) {
+                    approvedSend = null
+                    addChat(ChatRole.SYSTEM, "Отправка подтверждена вами кнопкой «Отправить».")
+                    return true
+                }
+            }
             val d = CompletableDeferred<Boolean>()
             pendingConfirm = d
             _state.update { it.copy(phase = Phase.WAITING_CONFIRMATION, status = "Жду подтверждения", confirmation = req) }
