@@ -33,7 +33,7 @@ class IdentityPromptTest {
     }
 
     @Test fun nameIsSpelledForRussianSpeech() {
-        assertEquals("Я Эр Вэ Агент, меня создала RusWeo", Speakable.clean("Я RW Agent, меня создала RusWeo"))
+        assertEquals("Я Эр Вэ Агент, меня создала Русвэо", Speakable.clean("Я RW Agent, меня создала RusWeo"))
         assertEquals("Эр Вэ Агент готов", Speakable.clean("RW AI готов"))
         assertEquals("RW Agent ready", Speakable.clean("RW Agent ready", russian = false))
     }
