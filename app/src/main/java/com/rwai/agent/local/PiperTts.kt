@@ -75,17 +75,20 @@ object PiperTts {
 
     fun stop() {
         job?.cancel()
-        job = null
         try { track?.pause(); track?.flush() } catch (_: Throwable) { }
     }
 
     /** Выгрузить движок (при удалении голоса или нехватке памяти). */
     fun release(voiceId: String? = null) {
-        synchronized(lock) {
-            if (voiceId == null || voiceId == engineId) {
-                try { engine?.release() } catch (_: Throwable) { }
-                engine = null
-                engineId = null
+        val running = job
+        scope.launch {
+            running?.join() // сначала дожидаемся, пока остановится идущий синтез, и только потом освобождаем движок
+            synchronized(lock) {
+                if (voiceId == null || voiceId == engineId) {
+                    try { engine?.release() } catch (_: Throwable) { }
+                    engine = null
+                    engineId = null
+                }
             }
         }
     }

@@ -26,6 +26,12 @@ class PiperVoicesTest {
         for ((lang, _) in PiperCatalog.LANGUAGES) assertNotNull(lang, PiperCatalog.defaultFor(lang))
     }
 
+    @Test fun dmitriIsTheOnlyRussianAndTheDefaultVoice() {
+        assertEquals(listOf("ru_dmitri"), PiperCatalog.forLanguage("ru-RU").map { it.id })
+        assertEquals(PiperCatalog.PERMANENT_ID, PiperCatalog.defaultFor("ru")?.id)
+        assertNotNull(PiperCatalog.byId(PiperCatalog.PERMANENT_ID))
+    }
+
     @Test fun languageTagsMapToVoiceLanguages() {
         assertEquals("ru", PiperCatalog.langOf("ru-RU"))
         assertEquals("es", PiperCatalog.langOf("es-UY"))

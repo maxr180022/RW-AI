@@ -21,12 +21,14 @@ object PiperCatalog {
 
     val ALL = listOf(
         PiperVoice("ru_dmitri", "ru", "Дмитрий (мужской)", "vits-piper-ru_RU-dmitri-medium.tar.bz2", 67_188_551L, "c86d0803737de13d441923ff3b3f309482fab8d7af3ec85949942809eb9a3660", "CC0"),
-        PiperVoice("ru_denis", "ru", "Денис (мужской)", "vits-piper-ru_RU-denis-medium.tar.bz2", 67_190_991L, "efa4c18e0b5e32b81d1b6df36b9d312831e5d545200e27848ef926a4cd930300", "CC0"),
         PiperVoice("en_ljspeech", "en", "LJ Speech (женский)", "vits-piper-en_US-ljspeech-medium.tar.bz2", 67_169_893L, "3dfb4b759d8be032a4903a9538d128b0fda2a06ab1de6cbc2d93a97e2dd83dba", "общественное достояние"),
         PiperVoice("es_ald", "es", "Ald, Мексика", "vits-piper-es_MX-ald-medium.tar.bz2", 67_196_497L, "c60cf7bc853eb01a875fba0756523fecf9d9f46c763b19785d223fc981fb4fb6", "Unlicense"),
         PiperVoice("es_davefx", "es", "DaveFX, Испания", "vits-piper-es_ES-davefx-medium.tar.bz2", 67_184_952L, "a3f6beb54a9cb893279f72978a22f807a4d9fc9c7848157b524d5cc7b7f58b22", "CC0"),
         PiperVoice("de_thorsten", "de", "Thorsten", "vits-piper-de_DE-thorsten-medium.tar.bz2", 67_214_254L, "50487d9c95fdf2191f31d2588569381063ba1591dcd4c7d4bdd30f12b2191714", "CC0"),
     )
+
+    /** Постоянный голос Руси: русский, мужской. Скачивается сам по Wi-Fi и не удаляется кнопкой. */
+    const val PERMANENT_ID = "ru_dmitri"
 
     val LANGUAGES = listOf("ru" to "Русский", "en" to "English", "es" to "Español", "de" to "Deutsch")
 

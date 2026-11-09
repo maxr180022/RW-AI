@@ -50,14 +50,18 @@ object PiperStore {
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("rwai_piper", Context.MODE_PRIVATE)
 
-    fun enabled(ctx: Context): Boolean = prefs(ctx).getBoolean("enabled", false)
+    fun enabled(ctx: Context): Boolean = prefs(ctx).getBoolean("enabled", true)
     fun setEnabled(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("enabled", on).apply() }
 
-    /** Выбранный голос языка: тот, что выбрал владелец, иначе первый из каталога. */
+    /**
+     * Голос языка: выбранный владельцем, если он скачан; иначе любой скачанный голос этого языка; иначе выбранный или первый из каталога.
+     * Так удаление выбранного голоса не оставляет приложение «искать» удалённый и молча падать на системный голос.
+     */
     fun chosen(ctx: Context, lang: String): PiperVoice? {
         val l = PiperCatalog.langOf(lang)
-        val id = prefs(ctx).getString("voice_$l", null)
-        return PiperCatalog.byId(id.orEmpty())?.takeIf { it.lang == l } ?: PiperCatalog.defaultFor(l)
+        val saved = PiperCatalog.byId(prefs(ctx).getString("voice_$l", null).orEmpty())?.takeIf { it.lang == l }
+        if (saved != null && isInstalled(ctx, saved)) return saved
+        return PiperCatalog.forLanguage(l).firstOrNull { isInstalled(ctx, it) } ?: saved ?: PiperCatalog.defaultFor(l)
     }
 
     fun choose(ctx: Context, v: PiperVoice) { prefs(ctx).edit().putString("voice_" + v.lang, v.id).apply() }
@@ -68,12 +72,31 @@ object PiperStore {
 
     /** Состояние по файлам на диске (при открытии экрана и после действий). Идущие загрузки не трогает. */
     fun refresh(ctx: Context) {
+        cleanOrphans(ctx)
         val next = HashMap<String, VoiceStatus>(_status.value)
         for (v in PiperCatalog.ALL) {
             if (jobs[v.id]?.isActive == true) continue
             next[v.id] = if (isInstalled(ctx, v)) VoiceStatus(State.READY, v.size, v.size) else VoiceStatus(State.NONE, 0, v.size)
         }
         _status.value = next
+    }
+
+    /** Голоса, которых больше нет в каталоге (например, убранный Денис), удаляются с телефона, чтобы не занимать место. */
+    private fun cleanOrphans(ctx: Context) {
+        val root = File(ctx.applicationContext.filesDir, "piper")
+        root.listFiles()?.forEach { f ->
+            if (PiperCatalog.ALL.none { f.name == it.id || f.name.startsWith(it.id + ".") }) f.deleteRecursively()
+        }
+    }
+
+    /** Постоянный голос (Дмитрий) докачивается сам по Wi-Fi при запуске приложения, если ещё не скачан. */
+    fun ensureDefault(ctx: Context) {
+        val app = ctx.applicationContext
+        if (!enabled(app)) return
+        val v = PiperCatalog.byId(PiperCatalog.PERMANENT_ID) ?: return
+        cleanOrphans(app)
+        if (isInstalled(app, v) || jobs[v.id]?.isActive == true) return
+        download(app, v, wifiOnly = true)
     }
 
     private fun set(id: String, st: VoiceStatus) { _status.value = _status.value + (id to st) }

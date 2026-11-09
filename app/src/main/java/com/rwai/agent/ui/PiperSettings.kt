@@ -60,6 +60,8 @@ fun PiperSettings() {
 
     PiperCatalog.LANGUAGES.forEach { (lang, name) ->
         Text(name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
+        val active = if (tick >= 0 && status.size >= 0) PiperStore.chosen(ctx, lang)?.takeIf { PiperStore.isInstalled(ctx, it) } else null
+        Text("Сейчас говорит: " + (active?.title ?: "системный голос"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         PiperCatalog.forLanguage(lang).forEach { v ->
             val st = status[v.id]
             val installed = st?.state == PiperStore.State.READY || PiperStore.isInstalled(ctx, v)
@@ -83,7 +85,8 @@ fun PiperSettings() {
                             // Проверка идёт самим Piper, без запасного голоса: так видно, работает он или нет.
                             if (!PiperTts.speak(ctx, sample(lang), lang)) note = "Не удалось начать озвучку."
                         }
-                        ActionPill("Удалить") { PiperTts.stop(); PiperStore.delete(ctx, v); tick++ }
+                        if (v.id == PiperCatalog.PERMANENT_ID) Text("постоянный голос Руси", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else ActionPill("Удалить") { PiperTts.stop(); PiperStore.delete(ctx, v); tick++ }
                     }
                     else -> {
                         st?.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
