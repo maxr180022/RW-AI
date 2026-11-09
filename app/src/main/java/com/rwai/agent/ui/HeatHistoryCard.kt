@@ -31,6 +31,7 @@ import com.rwai.agent.local.LocalLlm
 import com.rwai.agent.logic.HeatEpisode
 import com.rwai.agent.logic.HeatSample
 import com.rwai.agent.logic.HeatTimeline
+import com.rwai.agent.phone.HeatExport
 import com.rwai.agent.phone.HeatLog
 import com.rwai.agent.phone.PhoneScan
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,7 @@ fun HeatHistoryCard(resumeTick: Int) {
     var samples by remember { mutableStateOf<List<HeatSample>>(emptyList()) }
     var episodes by remember { mutableStateOf<List<HeatEpisode>>(emptyList()) }
     var culprits by remember { mutableStateOf<List<HeatTimeline.Culprit>>(emptyList()) }
+    var shareNote by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     val usageOk = remember(resumeTick) { PhoneScan.hasUsageAccess(ctx) }
 
@@ -127,7 +129,23 @@ fun HeatHistoryCard(resumeTick: Int) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { scope.launch { withContext(Dispatchers.Default) { HeatLog.addMark(ctx) }; load() } }) { Text("Нагрелся сейчас") }
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        shareNote = try {
+                            val file = withContext(Dispatchers.IO) { HeatExport.write(ctx) }
+                            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(android.content.Intent.createChooser(send, "Выгрузить замеры").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                            "Файл замеров готов: " + file.name
+                        } catch (e: Exception) { "Не удалось выгрузить: " + e.javaClass.simpleName }
+                    }
+                }) { Text("Выгрузить замеры") }
             }
+            shareNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!usageOk) OutlinedButton(onClick = { ctx.startActivity(PhoneScan.usageSettingsIntent()) }) { Text("Доступ к статистике") }
                 OutlinedButton(onClick = { scope.launch { load() } }) { Text("Обновить") }

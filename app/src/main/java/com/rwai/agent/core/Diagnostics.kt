@@ -84,6 +84,9 @@ object Diagnostics {
             rows.forEach { sb.append(t(it.ts)).append(" [").append(it.taskId % 100000).append("] ").append(it.kind).append(' ').append(it.tool ?: "").append(" | ").append(it.detail.replace('\n', ' ').take(400)).append(" | ").append(it.status).append('\n') }
         } catch (_: Exception) { sb.append("не удалось прочитать\n") }
 
+        h("Нагрев: замеры и разбор (48 часов)")
+        try { sb.append(com.rwai.agent.phone.HeatExport.build(ctx)) } catch (_: Exception) { sb.append("не удалось собрать\n") }
+
         h("Открытый диалог (последние 60 сообщений)")
         try {
             val id = Graph.controller.state.value.dialogId
