@@ -54,7 +54,7 @@ fun HeatHistoryCard(resumeTick: Int) {
         val now = System.currentTimeMillis()
         val from = now - 24L * 3_600_000L
         withContext(Dispatchers.Default) {
-            HeatLog.record(ctx, force = true)
+            HeatLog.record(ctx)
             val s = HeatLog.read(ctx, from)
             val iv = PhoneScan.activityIntervals(ctx, from, now) + LocalLlm.busyIntervals(from)
             samples = s

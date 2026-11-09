@@ -87,4 +87,13 @@ class HeatTimelineTest {
         assertTrue(e.marked)
         assertEquals("Игра", e.suspects.first().label)
     }
+
+    @Test fun chargingStartedDuringRiseIsFirstSuspect() {
+        val s = (0..60 step 5).map { m ->
+            HeatSample(t0 + m * min, if (m < 20) 35f else 35f + (m - 20) * 0.1f, 58 + m / 5, m >= 20, true, if (m >= 20) 6000 else 300)
+        }
+        val e = HeatTimeline.episodes(s, listOf(iv("Telegram", "экран", 20, 55)), marks = listOf(t0 + 55 * min)).single()
+        assertEquals("зарядка", e.suspects.first().type)
+        assertTrue(e.suspects.first().label.contains("6.0 А") || e.suspects.first().label.contains("6,0 А"))
+    }
 }

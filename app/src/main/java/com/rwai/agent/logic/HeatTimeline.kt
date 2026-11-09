@@ -91,7 +91,20 @@ object HeatTimeline {
             coolMin[key] = (cool / MIN).toInt().coerceAtLeast(0)
         }
 
-        // 4. Подозреваемые для каждого нагрева.
+        // 4. Подозреваемые для каждого нагрева. Зарядка, включённая в это время, идёт первой: быстрая зарядка сама греет батарею.
+        fun chargeSuspect(winStart: Long, winEnd: Long): EpisodeSuspect? {
+            val idx = samples.indices.firstOrNull { k ->
+                val x = samples[k]
+                x.charging && x.t in winStart..winEnd && (k == 0 || !samples[k - 1].charging)
+            } ?: return null
+            val first = samples[idx]
+            val run = samples.drop(idx).takeWhile { it.charging && it.t <= winEnd }
+            val last = run.last()
+            val maxMa = run.maxOf { it.ma }
+            val label = "Зарядка" + (if (maxMa > 0) ", ток до ${"%.1f".format(maxMa / 1000f)} А" else "") +
+                (if (first.pct >= 0 && last.pct >= 0) ", заряд ${first.pct}→${last.pct}%" else "")
+            return EpisodeSuspect(label, "зарядка", null, ((last.t - first.t) / MIN).toInt().coerceAtLeast(1), 0, first.t, last.t, HeatVerdict.LIKELY)
+        }
         fun suspectsIn(winStart: Long, winEnd: Long): List<EpisodeSuspect> {
             val suspects = ArrayList<EpisodeSuspect>()
             for ((key, list) in byKey) {
@@ -106,10 +119,11 @@ object HeatTimeline {
                     inside.minOf { it.start }.coerceAtLeast(winStart), inside.maxOf { it.end }.coerceAtMost(winEnd), verdict,
                 )
             }
-            return suspects.sortedWith(
+            val ranked = suspects.sortedWith(
                 compareBy<EpisodeSuspect> { it.verdict }
                     .thenByDescending { it.minInEpisode * (if (it.kind in setOf("игра", "видео", "карты")) 2 else 1) },
             )
+            return listOfNotNull(chargeSuspect(winStart, winEnd)) + ranked
         }
         val result = ArrayList<HeatEpisode>()
         for (d in drafts) {
@@ -207,6 +221,7 @@ object HeatTimeline {
             (if (e.chargingAtRise) ", на зарядке" else "") + (if (e.screenOnAtRise) ", экран включён" else ", экран выключен")
 
     fun line(s: EpisodeSuspect): String {
+        if (s.type == "зарядка") return "${s.label}, с ${hm(s.firstStart)} по ${hm(s.lastEnd)}: сама зарядка греет батарею, особенно быстрая; вероятная причина"
         val what = when (s.type) {
             "служба" -> "работал в фоне (служба)"
             "модель" -> "считала локальная модель"
