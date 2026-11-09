@@ -65,10 +65,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += "-Xskip-metadata-version-check" // LiteRT-LM собрана более новым Kotlin, чем читает компилятор
-    }
 
     buildFeatures {
         compose = true
@@ -83,6 +79,13 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.add("-Xskip-metadata-version-check") // LiteRT-LM собрана более новым Kotlin, чем читает компилятор
     }
 }
 
