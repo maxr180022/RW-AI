@@ -496,7 +496,7 @@ class AgentController(
         val speakNow = speakTask
         val origin = originPkg
         var movedApps = false
-        val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(t, russian = s.language.startsWith("ru")), s.language) }
+        val say = { t: String -> speaker.speak(com.rwai.agent.logic.Speakable.clean(if (com.rwai.agent.voice.SpeechPrefs.full(appContext)) t else com.rwai.agent.logic.Speakable.brief(t), russian = s.language.startsWith("ru")), s.language) }
         val secrets = { listOfNotNull(settings.apiKey()) }
         val profileValues = com.rwai.agent.Graph.profile.values()
         // Ни ключи, ни личные данные профиля не уходят модели и в журнал: вместо значений — плейсхолдеры.

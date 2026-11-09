@@ -32,14 +32,11 @@ class PiperVoicesTest {
         assertNotNull(PiperCatalog.byId(PiperCatalog.PERMANENT_ID))
     }
 
-    @Test fun englishHasSeveralMaleVoicesAndJoeIsTheDefault() {
+    @Test fun exactlyOneVoicePerLanguageAndEnglishIsJoe() {
+        assertEquals(4, PiperCatalog.ALL.size)
+        for ((lang, _) in PiperCatalog.LANGUAGES) assertEquals(1, PiperCatalog.forLanguage(lang).size)
         assertEquals("en_joe", PiperCatalog.defaultFor("en-US")?.id)
-        assertTrue(PiperCatalog.forLanguage("en").size >= 3)
-    }
-
-    @Test fun aldIsGone() {
-        assertTrue(PiperCatalog.byId("es_ald") == null)
-        assertEquals(listOf("es_davefx"), PiperCatalog.forLanguage("es").map { it.id })
+        assertEquals("de_thorsten", PiperCatalog.defaultFor("de")?.id)
     }
 
     @Test fun languageTagsMapToVoiceLanguages() {

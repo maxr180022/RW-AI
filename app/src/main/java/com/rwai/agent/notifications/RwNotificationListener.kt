@@ -19,6 +19,8 @@ import com.rwai.agent.logic.SensitiveMasker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.launch
 
 /**
@@ -30,6 +32,9 @@ class RwNotificationListener : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var screenReceiver: BroadcastReceiver? = null
+
+    /** Когда по разговору последний раз пришло уведомление (ключ разговора → время): чтобы отличить закрытие из-за ответа от замены новым сообщением. */
+    private val lastPost = ConcurrentHashMap<String, Long>()
 
     /** Экран выключен/разблокирован: события, а не опрос, — на расход заряда не влияет. */
     private fun registerScreenReceiver() {
@@ -93,10 +98,15 @@ class RwNotificationListener : NotificationListenerService() {
         val style = try { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notif) } catch (e: Exception) { null }
         val isGroup = (style?.isGroupConversation == true) ||
             (Build.VERSION.SDK_INT >= 28 && extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false))
+        var lastOutgoing = 0L
         if (style != null && style.messages.isNotEmpty()) {
+            val selfKey = style.user.key
             for (m in style.messages) {
                 val t = m.text?.toString()?.trim().orEmpty()
-                if (t.isNotEmpty()) items += Triple(m.timestamp, m.person?.name?.toString(), t)
+                if (t.isEmpty()) continue
+                val p = m.person
+                val mine = p == null || (selfKey != null && p.key == selfKey)
+                if (mine) lastOutgoing = maxOf(lastOutgoing, m.timestamp) else items += Triple(m.timestamp, p?.name?.toString(), t)
             }
         } else {
             val body = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()?.trim().orEmpty()
@@ -104,6 +114,17 @@ class RwNotificationListener : NotificationListenerService() {
         }
         val title = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+
+        // Исходящие: в разговоре есть сообщение самого владельца, значит, он уже общался. Всё, что пришло раньше него, закрыто.
+        val convKeys = HashSet<String>()
+        title?.let { convKeys += PendingReplies.key(it) }
+        items.forEach { (_, sender, _) -> sender?.let { convKeys += PendingReplies.key(it) } }
+        convKeys.remove("")
+        if (!secret && !isGroup && MessageTriage.isMessaging(n.packageName)) {
+            val nowTs = System.currentTimeMillis()
+            convKeys.forEach { lastPost[it] = nowTs }
+            if (lastOutgoing > 0) convKeys.forEach { com.rwai.agent.digest.RepliedStore.mark(it, lastOutgoing) }
+        }
 
         // Поле «Ответить» из уведомления личного разговора: по нему можно ответить, не открывая приложение (см. ReplyHandles).
         if (!secret && !isGroup && MessageTriage.isMessaging(n.packageName)) {
@@ -140,6 +161,38 @@ class RwNotificationListener : NotificationListenerService() {
                 // Запись уведомления не должна ронять службу
             }
         }
+    }
+
+    /**
+     * Уведомление личного разговора убрали, потому что владелец нажал его (открыл чат) или мессенджер сам закрыл его (чат прочитан или ответ отправлен в самом приложении).
+     * Значит, он уже общался: разговор помечается отвеченным на этот момент. Смахнул вручную (REASON_CANCEL) не считается. Закрытие из-за замены новым сообщением отсекается:
+     * если за 2,5 секунды по разговору пришло новое уведомление, отметка не ставится.
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?, reason: Int) {
+        super.onNotificationRemoved(sbn, rankingMap, reason)
+        try {
+            val n = sbn ?: return
+            if (n.packageName == packageName || !MessageTriage.isMessaging(n.packageName)) return
+            if (reason != REASON_CLICK && reason != REASON_APP_CANCEL) return
+            val notif = n.notification ?: return
+            if (notif.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+            val extras = notif.extras
+            val style = try { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notif) } catch (_: Exception) { null }
+            val isGroup = (style?.isGroupConversation == true) || (Build.VERSION.SDK_INT >= 28 && extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false))
+            if (isGroup) return
+            val keys = HashSet<String>()
+            (extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE) ?: extras.getCharSequence(Notification.EXTRA_TITLE))?.toString()?.let { keys += PendingReplies.key(it) }
+            style?.messages?.forEach { m -> m.person?.name?.toString()?.let { keys += PendingReplies.key(it) } }
+            keys.remove("")
+            if (keys.isEmpty()) return
+            val removedAt = System.currentTimeMillis()
+            scope.launch {
+                if (reason == REASON_APP_CANCEL) delay(2_500)
+                val still = keys.filter { (lastPost[it] ?: 0L) < removedAt }
+                still.forEach { com.rwai.agent.digest.RepliedStore.mark(it, removedAt) }
+                if (still.isNotEmpty()) Graph.db.changes.value = System.nanoTime()
+            }
+        } catch (_: Exception) { }
     }
 
     private fun labelOf(pkg: String): String = try {

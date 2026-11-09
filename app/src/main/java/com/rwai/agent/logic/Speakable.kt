@@ -13,6 +13,17 @@ object Speakable {
     private val maxim = Regex("(?<![\\p{L}\\p{N}])(Maxim|Максим)\\s+(Ricco|Рикко|Рико)(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
     private val ruswe = Regex("(?<![\\p{L}\\p{N}])(Rus[\\s-]?Weo|Рус[\\s-]?Вео)(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
 
+    /** Краткая версия для автоматической озвучки итога: первые [sentences] фразы, не длиннее [maxChars]. Полный текст остаётся в чате. */
+    fun brief(text: String, sentences: Int = 2, maxChars: Int = 220): String {
+        val flat = text.replace(Regex("\\s+"), " ").trim()
+        val parts = Regex("(?<=[.!?…])\\s+").split(flat)
+        val out = parts.take(sentences).joinToString(" ")
+        if (out.length <= maxChars) return out
+        val cut = out.take(maxChars)
+        val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?', '…'))
+        return if (end > maxChars / 2) cut.substring(0, end + 1) else cut
+    }
+
     /** [russian]: русскому синтезатору имя читаем по буквам — «Эр Вэ Агент». */
     fun clean(text: String, maxChars: Int = 700, russian: Boolean = true): String {
         // Имена создателей русский синтезатор читает как хочет владелец: «Максим РикКо», «РусВЕо».

@@ -7,9 +7,6 @@
 | Dmitri | ru | OHF-Voice/voice-datasets | CC0 |
 | Denis | ru | OHF-Voice/voice-datasets | CC0 |
 | Joe | en | OHF-Voice/voice-datasets | CC0 |
-| John | en | LibriVox | общественное достояние |
-| Norman | en | LibriVox | общественное достояние |
-| LJ Speech | en | LJ Speech | общественное достояние |
 | DaveFX | es (Испания) | OHF-Voice/voice-datasets | CC0 |
 | Thorsten | de | Thorsten-Voice | CC0 |
 

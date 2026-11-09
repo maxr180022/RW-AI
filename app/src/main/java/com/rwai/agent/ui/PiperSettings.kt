@@ -5,16 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,22 +32,24 @@ private fun sample(lang: String): String = when (lang) {
     else -> "Hello! I am Rusya, your phone agent. How can I help you?"
 }
 
-/** Голоса Piper: включить, скачать по языкам, выбрать, проверить, удалить. Работают без интернета, голоса скачиваются один раз. */
+/**
+ * Голоса Piper: по одному постоянному голосу на язык (русский Дмитрий, English Joe, Español DaveFX, Deutsch Thorsten).
+ * Скачиваются сами по Wi-Fi при запуске приложения и не удаляются. Для продажи они войдут в установочный пакет.
+ */
 @Composable
 fun PiperSettings() {
     val ctx = LocalContext.current
     val status by PiperStore.status.collectAsState()
     val info by PiperTts.info.collectAsState()
     var enabled by remember { mutableStateOf(PiperStore.enabled(ctx)) }
-    var tick by remember { mutableIntStateOf(0) } // перерисовка после выбора голоса
     var note by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { PiperStore.refresh(ctx) }
+    LaunchedEffect(Unit) { PiperStore.refresh(ctx); PiperStore.ensureDefault(ctx) }
 
     SwitchRow(
         "Озвучка Piper (без интернета)",
-        "Естественные голоса прямо на телефоне вместо системного голоса Google. Голос каждого языка скачивается один раз, около 64 МБ. Пока голос не скачан или что-то не вышло, говорит системный голос.",
+        "Естественные голоса прямо на телефоне вместо системного голоса Google. Голоса постоянные, они скачиваются сами по Wi-Fi при запуске приложения (около 64 МБ каждый). Пока голос не скачан или что-то не вышло, говорит системный голос.",
         enabled,
-    ) { v -> PiperStore.setEnabled(ctx, v); enabled = v }
+    ) { v -> PiperStore.setEnabled(ctx, v); enabled = v; if (v) PiperStore.ensureDefault(ctx) }
     if (info.isNotBlank()) {
         Text("Состояние Piper: $info", style = MaterialTheme.typography.bodyMedium)
     } else {
@@ -59,39 +58,32 @@ fun PiperSettings() {
     note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
 
     PiperCatalog.LANGUAGES.forEach { (lang, name) ->
-        Text(name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
-        val active = if (tick >= 0 && status.size >= 0) PiperStore.chosen(ctx, lang)?.takeIf { PiperStore.isInstalled(ctx, it) } else null
-        Text("Сейчас говорит: " + (active?.title ?: "системный голос"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        PiperCatalog.forLanguage(lang).forEach { v ->
-            val st = status[v.id]
-            val installed = st?.state == PiperStore.State.READY || PiperStore.isInstalled(ctx, v)
-            val picked = PiperStore.chosen(ctx, lang)?.id == v.id && tick >= 0
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(v.title + (if (installed && picked) " · выбран" else ""), style = MaterialTheme.typography.bodyLarge)
-                Text("Лицензия: ${v.license} · ${DownloadMath.human(v.size)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                when {
-                    st?.state == PiperStore.State.DOWNLOADING -> {
-                        LinearProgressIndicator(progress = { DownloadMath.percent(st.done, st.total) / 100f }, modifier = Modifier.fillMaxWidth())
-                        Text("Скачивание: ${DownloadMath.percent(st.done, st.total)} %. Держите приложение открытым.", style = MaterialTheme.typography.bodySmall)
-                        ActionPill("Остановить") { PiperStore.stop(ctx, v) }
+        val v = PiperCatalog.defaultFor(lang) ?: return@forEach
+        val st = status[v.id]
+        val installed = st?.state == PiperStore.State.READY || PiperStore.isInstalled(ctx, v)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 6.dp)) {
+            Text(name, style = MaterialTheme.typography.titleSmall)
+            Text(v.title + " · постоянный голос", style = MaterialTheme.typography.bodyLarge)
+            Text("Лицензия: ${v.license} · ${DownloadMath.human(v.size)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when {
+                st?.state == PiperStore.State.DOWNLOADING -> {
+                    LinearProgressIndicator(progress = { DownloadMath.percent(st.done, st.total) / 100f }, modifier = Modifier.fillMaxWidth())
+                    Text("Скачивание: ${DownloadMath.percent(st.done, st.total)} %. Держите приложение открытым.", style = MaterialTheme.typography.bodySmall)
+                }
+                st?.state == PiperStore.State.VERIFYING -> Text("Проверяю файл…", style = MaterialTheme.typography.bodySmall)
+                st?.state == PiperStore.State.EXTRACTING -> Text("Распаковываю…", style = MaterialTheme.typography.bodySmall)
+                installed -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("✓ Установлен", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    ActionPill("Проверить") {
+                        note = null
+                        // Проверка идёт самим Piper, без запасного голоса: так видно, работает он или нет.
+                        if (!PiperTts.speak(ctx, sample(lang), lang)) note = "Не удалось начать озвучку."
                     }
-                    st?.state == PiperStore.State.VERIFYING -> Text("Проверяю файл…", style = MaterialTheme.typography.bodySmall)
-                    st?.state == PiperStore.State.EXTRACTING -> Text("Распаковываю…", style = MaterialTheme.typography.bodySmall)
-                    installed -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (!picked) ActionPill("Выбрать", accent = true) { PiperStore.choose(ctx, v); tick++ }
-                        ActionPill("Проверить") {
-                            PiperStore.choose(ctx, v); tick++
-                            note = null
-                            // Проверка идёт самим Piper, без запасного голоса: так видно, работает он или нет.
-                            if (!PiperTts.speak(ctx, sample(lang), lang)) note = "Не удалось начать озвучку."
-                        }
-                        if (v.id == PiperCatalog.PERMANENT_ID) Text("постоянный голос Руси", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else ActionPill("Удалить") { PiperTts.stop(); PiperStore.delete(ctx, v); tick++ }
-                    }
-                    else -> {
-                        st?.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                        ActionPill("Скачать (${DownloadMath.human(v.size)})", accent = true) { note = PiperStore.download(ctx, v) }
-                    }
+                }
+                else -> {
+                    st?.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                    Text("Ещё не скачан: скачается сам по Wi-Fi.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ActionPill("Скачать сейчас (${DownloadMath.human(v.size)})", accent = true) { note = PiperStore.download(ctx, v) }
                 }
             }
         }

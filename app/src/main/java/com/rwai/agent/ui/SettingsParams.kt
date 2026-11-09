@@ -361,6 +361,13 @@ private fun VoicePage() {
             Graph.settings.update { it.copy(voiceAutoRun = v) }
         }
     }
+    val speechCtx = androidx.compose.ui.platform.LocalContext.current
+    var speakFull by remember { mutableStateOf(com.rwai.agent.voice.SpeechPrefs.full(speechCtx)) }
+    SettingsGroup("Длина озвучки") {
+        SwitchRow("Озвучивать ответ полностью", "Выключено (по умолчанию): Руся озвучивает только первые две фразы ответа, остальное читайте в чате или нажмите динамик у сообщения, чтобы озвучить его целиком.", speakFull) { v ->
+            com.rwai.agent.voice.SpeechPrefs.setFull(speechCtx, v); speakFull = v
+        }
+    }
     SettingsGroup("Голос Piper (офлайн, естественный)") { PiperSettings() }
     SettingsGroup("Системный голос (запасной)") { ExtrasVoice() }
 }

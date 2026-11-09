@@ -114,10 +114,12 @@ fun InboxScreen(resumeTick: Int) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun DigestCards(ts: Long?, text: String) {
     val items = remember(text) { DigestView.parse(text) }
     var answered by remember { mutableStateOf(AnsweredStore.raw()) }
+    var skipped by remember { mutableStateOf(com.rwai.agent.digest.SkippedStore.raw()) }
     var composing by remember(text) { mutableStateOf<String?>(null) } // ключ карточки, у которой открыто поле «что сделать»
     var draft by remember(text) { mutableStateOf("") }
     var hint by remember(text) { mutableStateOf<Pair<String, String>?>(null) } // (ключ карточки, текст подсказки)
@@ -132,6 +134,7 @@ private fun DigestCards(ts: Long?, text: String) {
         }
         items.forEachIndexed { index, it0 ->
             val key = DigestView.cardKey(text, index, it0)
+            if (AnsweredCards.has(skipped, key)) return@forEachIndexed // пропущенная карточка не показывается и не считается неотвеченной
             val needs = DigestView.needsReply(it0.kind)
             val done = needs && AnsweredCards.has(answered, key)
             // Цвета только из палитры приложения: красный — ждёт ответа, зелёный — уже отработано, остальное — просто информация.
@@ -174,7 +177,7 @@ private fun DigestCards(ts: Long?, text: String) {
                 }
                 if (canReply) {
                     // Кнопки остаются всегда, и после ответа: можно ответить ещё раз или вернуть карточку в «не отвечено».
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
                         ActionPill(
                             when (it0.kind) { DigestKind.URGENT -> "Разобраться"; DigestKind.NOTE -> "Что сделать"; else -> "Ответить" },
                             accent = needs && !done,
@@ -183,6 +186,10 @@ private fun DigestCards(ts: Long?, text: String) {
                             hint = null
                         }
                         ActionPill("Предложить ответ") { send(DigestView.suggestTask(it0), false) }
+                        ActionPill("Пропустить") {
+                            skipped = com.rwai.agent.digest.SkippedStore.skip(key)
+                            it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.mark(who.first) }
+                        }
                         if (done) ActionPill("Не отвечено") {
                             answered = AnsweredStore.unmark(key)
                             it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.unmark(who.first) }

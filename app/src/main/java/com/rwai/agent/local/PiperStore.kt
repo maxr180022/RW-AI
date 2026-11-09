@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
@@ -89,13 +90,13 @@ object PiperStore {
         }
     }
 
-    /** Постоянный голос (Дмитрий) докачивается сам по Wi-Fi при запуске приложения, если ещё не скачан. */
+    /** Все постоянные голоса скачиваются сами по Wi-Fi при запуске приложения: по одному, следующий после предыдущего. */
     fun ensureDefault(ctx: Context) {
         val app = ctx.applicationContext
         if (!enabled(app)) return
-        val v = PiperCatalog.byId(PiperCatalog.PERMANENT_ID) ?: return
         cleanOrphans(app)
-        if (isInstalled(app, v) || jobs[v.id]?.isActive == true) return
+        if (jobs.values.any { it.isActive }) return
+        val v = PiperCatalog.ALL.firstOrNull { !isInstalled(app, it) } ?: return
         download(app, v, wifiOnly = true)
     }
 
@@ -175,6 +176,7 @@ object PiperStore {
             extract(part, dir(ctx, v))
             part.delete()
             set(v.id, VoiceStatus(State.READY, v.size, v.size))
+            scope.launch { delay(800); ensureDefault(ctx) } // следующий голос по очереди
         } catch (e: CancellationException) {
             refresh(ctx)
             throw e

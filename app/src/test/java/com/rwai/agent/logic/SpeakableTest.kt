@@ -21,6 +21,19 @@ class SpeakableTest {
     @Test fun shortTextUntouched() = assertEquals("Готово", Speakable.clean("Готово"))
 }
 
+class SpeakableBriefTest {
+    @Test fun onlyTheFirstTwoSentencesAreSpoken() {
+        assertEquals("Не беспокоить выключен. Расписание сна осталось.", Speakable.brief("Не беспокоить выключен. Расписание сна осталось. Если нужно, могу отключить и его. Скажи!"))
+        assertEquals("Готово.", Speakable.brief("Готово."))
+        assertEquals("", Speakable.brief(""))
+    }
+
+    @Test fun aLongSentenceIsCut() {
+        val r = Speakable.brief("слово ".repeat(100))
+        assertTrue(r.length <= 220)
+    }
+}
+
 class IdentityPromptTest {
     @Test fun agentKnowsNameCreatorAndGender() {
         val p = SystemPrompt.build()
