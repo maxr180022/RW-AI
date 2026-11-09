@@ -43,7 +43,7 @@ object LocalLlm {
     private fun logBusy(durationMs: Long) {
         val now = System.currentTimeMillis()
         busyLog.add(now to durationMs)
-        while (busyLog.peek()?.let { now - it.first > 3 * 3_600_000L } == true) busyLog.poll()
+        while (busyLog.peek()?.let { now - it.first > 48 * 3_600_000L } == true) busyLog.poll()
     }
 
     /** Сколько миллисекунд модель считала (загрузка и ответ) за последние [windowMs] мс. */
@@ -51,6 +51,10 @@ object LocalLlm {
         val from = System.currentTimeMillis() - windowMs
         return busyLog.filter { it.first >= from }.sumOf { it.second }
     }
+
+    /** Периоды работы модели с [from] (мс): для истории нагрева. */
+    fun busyIntervals(from: Long): List<com.rwai.agent.logic.ActivityInterval> =
+        busyLog.filter { it.first >= from }.map { com.rwai.agent.logic.ActivityInterval("Руся: локальная модель", "модель", it.first - it.second, it.first) }
 
     /** Модель сейчас в оперативной памяти. */
     fun isLoaded(): Boolean = engine != null

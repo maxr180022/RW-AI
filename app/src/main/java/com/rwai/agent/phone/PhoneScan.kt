@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Process
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
+import com.rwai.agent.logic.ActivityInterval
 import com.rwai.agent.logic.AppActivity
 import com.rwai.agent.logic.AppFacts
 import java.util.Calendar
@@ -99,6 +100,60 @@ object PhoneScan {
                 kind = kind,
             )
         }
+        return out
+    }
+
+    private fun friendly(pkg: String, label: String?): String? = when {
+        pkg == "com.google.android.projection.gearhead" -> "Android Auto"
+        else -> label
+    }
+
+    private fun kindOf(ai: ApplicationInfo): String? = if (Build.VERSION.SDK_INT >= 26) when (ai.category) {
+        ApplicationInfo.CATEGORY_GAME -> "игра"; ApplicationInfo.CATEGORY_VIDEO -> "видео"; ApplicationInfo.CATEGORY_MAPS -> "карты"
+        ApplicationInfo.CATEGORY_AUDIO -> "музыка"; ApplicationInfo.CATEGORY_SOCIAL -> "соцсеть"; else -> null
+    } else null
+
+    /** Периоды «на экране» и «служба переднего плана» всех приложений за [from]…[to] (журнал событий Android хранит несколько суток). */
+    fun activityIntervals(c: Context, from: Long, to: Long): List<ActivityInterval> {
+        if (!hasUsageAccess(c)) return emptyList()
+        val usm = c.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val pm = c.packageManager
+        val out = ArrayList<ActivityInterval>()
+        val openFg = HashMap<String, Long>()
+        val openSvc = HashMap<String, Long>()
+        val names = HashMap<String, Pair<String?, String?>?>()
+        fun info(p: String): Pair<String?, String?>? = names.getOrPut(p) {
+            try {
+                val ai = pm.getApplicationInfo(p, 0)
+                friendly(p, pm.getApplicationLabel(ai).toString()) to kindOf(ai)
+            } catch (_: Exception) {
+                friendly(p, null)?.let { it to null }
+            }
+        }
+        fun add(key: String, start: Long, end: Long, type: String) {
+            val p = key.substringBefore('/')
+            if (end <= start || p == c.packageName) return
+            val inf = info(p)
+            val label = inf?.first ?: if (p == "android" || p.startsWith("com.android.") || p.startsWith("com.google.android.gms")) return else p.substringAfterLast('.')
+            out += ActivityInterval(label, type, start, end, inf?.second)
+        }
+        try {
+            val ev = usm.queryEvents(from, to)
+            val e = UsageEvents.Event()
+            while (ev.hasNextEvent()) {
+                ev.getNextEvent(e)
+                val pkg = e.packageName ?: continue
+                val key = pkg + "/" + (e.className ?: "")
+                when (e.eventType) {
+                    1 -> openFg[key] = e.timeStamp
+                    2 -> add(key, openFg.remove(key) ?: from, e.timeStamp, "экран")
+                    19 -> openSvc[key] = e.timeStamp
+                    20 -> add(key, openSvc.remove(key) ?: from, e.timeStamp, "служба")
+                }
+            }
+        } catch (_: Exception) { return out }
+        for ((k, t) in openFg) add(k, t, to, "экран")
+        for ((k, t) in openSvc) add(k, t, to, "служба")
         return out
     }
 

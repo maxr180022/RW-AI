@@ -24,7 +24,7 @@ android {
         targetSdk = 35
         // Растёт с каждой облачной сборкой, чтобы новая версия всегда считалась обновлением.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.12.1"
+        versionName = "0.12.2"
         // Только реальные телефоны (экономит ~20 МБ: нативная библиотека распознавания речи)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

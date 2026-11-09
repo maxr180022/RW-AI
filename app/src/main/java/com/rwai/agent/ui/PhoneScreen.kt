@@ -241,6 +241,7 @@ fun PhoneScreen(resumeTick: Int) {
                 Text("Всё считается на телефоне, ничего не отправляется.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        HeatHistoryCard(resumeTick)
         PhoneHealthCard(resumeTick)
         OutlinedButton(onClick = { WakeStats.resetDrain(ctx); stats = stats.first to null }, modifier = Modifier.padding(bottom = 16.dp)) {
             Text("Сбросить замеры расхода")
