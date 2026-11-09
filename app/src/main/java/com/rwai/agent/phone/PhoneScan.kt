@@ -2,6 +2,7 @@ package com.rwai.agent.phone
 
 import android.app.AppOpsManager
 import android.app.admin.DevicePolicyManager
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
@@ -12,6 +13,7 @@ import android.os.Build
 import android.os.Process
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
+import com.rwai.agent.logic.AppActivity
 import com.rwai.agent.logic.AppFacts
 import java.util.Calendar
 
@@ -34,6 +36,70 @@ object PhoneScan {
             usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, cal.timeInMillis, System.currentTimeMillis())
                 .groupBy { it.packageName }.mapValues { (_, v) -> (v.sumOf { it.totalTimeInForeground } / 60_000L).toInt() }
         } catch (_: Exception) { emptyMap() }
+    }
+
+    /** Что делали приложения за последние [windowMin] минут: время на экране и со службой переднего плана (журнал событий Android). */
+    fun recentActivity(c: Context, windowMin: Int = 60): List<AppActivity> {
+        if (!hasUsageAccess(c)) return emptyList()
+        val now = System.currentTimeMillis()
+        val from = now - windowMin * 60_000L
+        val usm = c.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val fg = HashMap<String, Long>()          // пакет → мс на экране
+        val svc = HashMap<String, Long>()         // пакет → мс со службой
+        val lastFg = HashMap<String, Long>()      // пакет → когда последний раз был на экране
+        val openFg = HashMap<String, Long>()      // компонент → начало
+        val openSvc = HashMap<String, Long>()
+        try {
+            val ev = usm.queryEvents(from, now)
+            val e = UsageEvents.Event()
+            while (ev.hasNextEvent()) {
+                ev.getNextEvent(e)
+                val pkg = e.packageName ?: continue
+                val key = pkg + "/" + (e.className ?: "")
+                val t = e.timeStamp
+                when (e.eventType) {
+                    1 -> openFg[key] = t // ACTIVITY_RESUMED
+                    2 -> { // ACTIVITY_PAUSED
+                        val s = openFg.remove(key) ?: from
+                        fg[pkg] = (fg[pkg] ?: 0L) + (t - s).coerceAtLeast(0)
+                        lastFg[pkg] = t
+                    }
+                    19 -> openSvc[key] = t // FOREGROUND_SERVICE_START
+                    20 -> { // FOREGROUND_SERVICE_STOP
+                        val s = openSvc.remove(key) ?: from
+                        svc[pkg] = (svc[pkg] ?: 0L) + (t - s).coerceAtLeast(0)
+                    }
+                }
+            }
+        } catch (_: Exception) { return emptyList() }
+        val nowFg = HashSet<String>()
+        val nowSvc = HashSet<String>()
+        for ((k, s) in openFg) { val p = k.substringBefore('/'); fg[p] = (fg[p] ?: 0L) + (now - s); lastFg[p] = now; nowFg += p }
+        for ((k, s) in openSvc) { val p = k.substringBefore('/'); svc[p] = (svc[p] ?: 0L) + (now - s); nowSvc += p }
+        val pm = c.packageManager
+        val out = ArrayList<AppActivity>()
+        for (p in fg.keys + svc.keys) {
+            var label: String? = null
+            var kind: String? = null
+            try {
+                val ai = pm.getApplicationInfo(p, 0)
+                label = pm.getApplicationLabel(ai).toString()
+                if (Build.VERSION.SDK_INT >= 26) kind = when (ai.category) {
+                    ApplicationInfo.CATEGORY_GAME -> "игра"; ApplicationInfo.CATEGORY_VIDEO -> "видео"; ApplicationInfo.CATEGORY_MAPS -> "карты"
+                    ApplicationInfo.CATEGORY_AUDIO -> "музыка"; ApplicationInfo.CATEGORY_SOCIAL -> "соцсеть"; else -> null
+                }
+            } catch (_: Exception) { }
+            // Системные службы без названия (оболочка, SystemUI) только шумят: пропускаем.
+            if (label == null && (p == "android" || p.startsWith("com.android.") || p.startsWith("com.google.android.gms"))) continue
+            out += AppActivity(
+                pkg = p, label = label ?: p.substringAfterLast('.'),
+                foregroundMin = ((fg[p] ?: 0L) / 60_000L).toInt(), serviceMin = ((svc[p] ?: 0L) / 60_000L).toInt(),
+                serviceNow = p in nowSvc,
+                lastForegroundMinAgo = lastFg[p]?.let { ((now - it) / 60_000L).toInt() },
+                kind = kind,
+            )
+        }
+        return out
     }
 
     fun scan(c: Context): List<AppFacts> {

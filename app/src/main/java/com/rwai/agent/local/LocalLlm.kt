@@ -37,6 +37,24 @@ object LocalLlm {
     @Volatile var lastGenMs: Long = 0
         private set
 
+    /** Журнал работы модели (конец, длительность в мс), чтобы вкладка «Телефон» могла честно сказать, греет ли телефон сама Руся. */
+    private val busyLog = java.util.concurrent.ConcurrentLinkedQueue<Pair<Long, Long>>()
+
+    private fun logBusy(durationMs: Long) {
+        val now = System.currentTimeMillis()
+        busyLog.add(now to durationMs)
+        while (busyLog.peek()?.let { now - it.first > 3 * 3_600_000L } == true) busyLog.poll()
+    }
+
+    /** Сколько миллисекунд модель считала (загрузка и ответ) за последние [windowMs] мс. */
+    fun busyMs(windowMs: Long): Long {
+        val from = System.currentTimeMillis() - windowMs
+        return busyLog.filter { it.first >= from }.sumOf { it.second }
+    }
+
+    /** Модель сейчас в оперативной памяти. */
+    fun isLoaded(): Boolean = engine != null
+
     private fun open(ctx: Context): Engine {
         val path = LocalModelStore.file(ctx)
         if (!LocalModelStore.isReady(ctx)) throw LocalModelException("Модель не скачана.")
@@ -65,6 +83,7 @@ object LocalLlm {
                 lastLoadMs = if (t1 - t0 > 50) t1 - t0 else 0
                 val answer = e.createConversation().use { c -> c.sendMessage(prompt).toString() }
                 lastGenMs = System.currentTimeMillis() - t1
+                logBusy(System.currentTimeMillis() - t0)
                 scheduleRelease()
                 answer.trim()
             } catch (t: LocalModelException) {
