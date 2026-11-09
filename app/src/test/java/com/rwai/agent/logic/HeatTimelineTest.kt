@@ -61,4 +61,30 @@ class HeatTimelineTest {
         val e = HeatTimeline.episodes(s, listOf(iv("Мелочь", "экран", 100, 101))).single()
         assertTrue(e.suspects.isEmpty())
     }
+
+    @Test fun culpritIsTheOneWithHighCurrentWhileWorking() {
+        // экран выключен, не на зарядке; служба A работала 100–300 при токе 500, служба B 400–500 при токе 100, фон 100
+        val s = (0..600 step 5).map { m ->
+            val ma = if (m in 100..300) 500 else 100
+            HeatSample(t0 + m * min, 33f + (if (m in 100..300) 3f else 0f), 50, false, false, ma)
+        }
+        val ivs = listOf(iv("A", "служба", 100, 300), iv("B", "служба", 400, 500))
+        val c = HeatTimeline.culprits(s, ivs)
+        assertEquals("A", c.first().label)
+        assertTrue(c.first().guilty)
+        val b = c.first { it.label == "B" }
+        assertTrue(!b.guilty)
+    }
+
+    @Test fun culpritsNeedEnoughSamples() {
+        val s = (0..20 step 5).map { HeatSample(t0 + it * min, 33f, 50, false, false, 300) }
+        assertTrue(HeatTimeline.culprits(s, listOf(iv("A", "служба", 0, 20))).isEmpty())
+    }
+
+    @Test fun manualMarkCreatesEpisodeWithSuspects() {
+        val s = samples(0 to 33f, 120 to 36f)
+        val e = HeatTimeline.episodes(s, listOf(iv("Игра", "экран", 70, 115, kind = "игра")), marks = listOf(t0 + 110 * min)).single()
+        assertTrue(e.marked)
+        assertEquals("Игра", e.suspects.first().label)
+    }
 }

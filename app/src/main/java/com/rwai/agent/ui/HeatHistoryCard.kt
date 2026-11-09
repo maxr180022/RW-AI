@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -43,6 +44,7 @@ fun HeatHistoryCard(resumeTick: Int) {
     val scope = rememberCoroutineScope()
     var samples by remember { mutableStateOf<List<HeatSample>>(emptyList()) }
     var episodes by remember { mutableStateOf<List<HeatEpisode>>(emptyList()) }
+    var culprits by remember { mutableStateOf<List<HeatTimeline.Culprit>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     val usageOk = remember(resumeTick) { PhoneScan.hasUsageAccess(ctx) }
 
@@ -54,7 +56,8 @@ fun HeatHistoryCard(resumeTick: Int) {
             val s = HeatLog.read(ctx, from)
             val iv = PhoneScan.activityIntervals(ctx, from, now) + LocalLlm.busyIntervals(from)
             samples = s
-            episodes = HeatTimeline.episodes(s, iv)
+            episodes = HeatTimeline.episodes(s, iv, marks = HeatLog.marks(ctx, from))
+            culprits = HeatTimeline.culprits(s, iv)
         }
         loaded = true
     }
@@ -106,6 +109,24 @@ fun HeatHistoryCard(resumeTick: Int) {
                         e.suspects.take(6).forEach { Text("• " + HeatTimeline.line(it), style = MaterialTheme.typography.bodyMedium) }
                     }
                 }
+            }
+            Text("Кто сажает батарею и греет (по замерам)", style = MaterialTheme.typography.titleSmall)
+            if (culprits.isEmpty()) {
+                Text(
+                    "Пока мало замеров: нужны хотя бы сутки обычного использования не на зарядке. Руся записывает ток батареи и температуру и сравнивает, какие приложения работают, когда ток и нагрев растут.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                val bad = culprits.filter { it.guilty }
+                Text(
+                    if (bad.isEmpty()) "Явных виновников по замерам нет: ни у одного приложения ток и температура заметно не выше, чем без него."
+                    else "Кандидаты на ограничение или удаление (${bad.size}), самый вредный сверху:",
+                    fontWeight = FontWeight.SemiBold,
+                )
+                (if (bad.isEmpty()) culprits.take(4) else bad.take(8)).forEach { Text("• " + HeatTimeline.culpritLine(it), style = MaterialTheme.typography.bodyMedium) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { scope.launch { withContext(Dispatchers.Default) { HeatLog.addMark(ctx) }; load() } }) { Text("Нагрелся сейчас") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!usageOk) OutlinedButton(onClick = { ctx.startActivity(PhoneScan.usageSettingsIntent()) }) { Text("Доступ к статистике") }
