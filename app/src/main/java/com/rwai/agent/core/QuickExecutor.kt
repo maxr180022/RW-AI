@@ -23,28 +23,33 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Calendar
 
 /** [ok] — действие выполнено и проверено; иначе [message] объясняет, почему, и команда уходит агенту. */
-data class QuickResult(val ok: Boolean, val message: String)
+/** [final] — при неудаче агенту команду НЕ отдавать: он с ней всё равно не справится (фонарик, громкость, будильник), только сожжёт токены. */
+data class QuickResult(val ok: Boolean, val message: String, val final: Boolean = false)
 
 /**
  * Выполнение быстрых действий прямыми системными вызовами. Где результат можно проверить (фонарик, громкость, «Не беспокоить», будильник),
  * он проверяется; не вышло — честно сообщаем и отдаём команду агенту.
  */
 object QuickExecutor {
-    suspend fun run(ctx: Context, a: QuickAction): QuickResult = try {
-        when (a) {
-            is QuickAction.Flashlight -> flashlight(ctx, a.on)
-            is QuickAction.MediaVolume -> volume(ctx, a)
-            is QuickAction.Dnd -> dnd(ctx, a.on)
-            is QuickAction.Alarm -> alarm(ctx, a)
-            is QuickAction.Timer -> timer(ctx, a)
-            is QuickAction.OpenApp -> viaTool(ctx, ToolCall("launch_app", mapOf("app" to a.name)))
-            QuickAction.Battery -> viaTool(ctx, ToolCall("phone_status"))
-            is QuickAction.Media -> viaTool(ctx, ToolCall("media_control", mapOf("action" to a.kind)))
+    suspend fun run(ctx: Context, a: QuickAction): QuickResult {
+        val r = try {
+            when (a) {
+                is QuickAction.Flashlight -> flashlight(ctx, a.on)
+                is QuickAction.MediaVolume -> volume(ctx, a)
+                is QuickAction.Dnd -> dnd(ctx, a.on)
+                is QuickAction.Alarm -> alarm(ctx, a)
+                is QuickAction.Timer -> timer(ctx, a)
+                is QuickAction.OpenApp -> viaTool(ctx, ToolCall("launch_app", mapOf("app" to a.name)))
+                QuickAction.Battery -> viaTool(ctx, ToolCall("phone_status"))
+                is QuickAction.Media -> viaTool(ctx, ToolCall("media_control", mapOf("action" to a.kind)))
+            }
+        } catch (e: SecurityException) {
+            QuickResult(false, "Системе не хватило разрешения для действия «" + QuickActions.label(a) + "»: " + (e.message ?: "").take(100))
+        } catch (e: Exception) {
+            QuickResult(false, "Не получилось выполнить «" + QuickActions.label(a) + "»: " + e.javaClass.simpleName + " " + (e.message ?: "").take(100))
         }
-    } catch (e: SecurityException) {
-        QuickResult(false, "Системе не хватило разрешения для действия «" + QuickActions.label(a) + "».")
-    } catch (e: Exception) {
-        QuickResult(false, "Не получилось выполнить «" + QuickActions.label(a) + "»: " + e.javaClass.simpleName + ".")
+        // Агент умеет только искать приложение по другому названию; для остального он по экранам не поможет.
+        return if (!r.ok && a !is QuickAction.OpenApp) r.copy(final = true) else r
     }
 
     private suspend fun viaTool(ctx: Context, call: ToolCall): QuickResult {

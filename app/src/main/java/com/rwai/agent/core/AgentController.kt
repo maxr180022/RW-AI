@@ -381,8 +381,8 @@ class AgentController(
             _state.update { it.copy(phase = Phase.RUNNING, status = "Разбираю команду…", task = text, steps = emptyList(), draft = null, confirmation = null) }
             job = scope.launch {
                 val r = try { QuickRouter.handle(appContext, text) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
-                if (r != null && r.ok) {
-                    addChat(ChatRole.AGENT, r.message)
+                if (r != null && (r.ok || r.final)) {
+                    addChat(if (r.ok) ChatRole.AGENT else ChatRole.ERROR, r.message)
                     _state.update { it.copy(phase = Phase.IDLE, status = "Готов", task = null) }
                     val sp = settings.current
                     if (speak || sp.speakResults) try { speaker.speak(com.rwai.agent.logic.Speakable.clean(r.message, russian = sp.language.startsWith("ru")), sp.language) } catch (_: Throwable) { }
