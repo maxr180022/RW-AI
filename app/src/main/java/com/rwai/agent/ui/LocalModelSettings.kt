@@ -94,9 +94,7 @@ fun LocalModelSettings() {
                                 val a = LocalLlm.generate(ctx, "Переведи на русский язык. Верни только перевод, без пояснений.\n\nТекст: " + sample.trim())
                                 fun sec(ms: Long) = String.format(java.util.Locale.forLanguageTag("ru"), "%.1f", ms / 1000.0)
                                 val load = if (LocalLlm.lastLoadMs > 0) "загрузка модели " + sec(LocalLlm.lastLoadMs) + " с, " else "модель уже в памяти, "
-                                a + "
-
-[Локальная модель, " + LocalLlm.backend() + ": " + load + "перевод " + sec(LocalLlm.lastGenMs) + " с]"
+                                a + "\n\n[Локальная модель, " + LocalLlm.backend() + ": " + load + "перевод " + sec(LocalLlm.lastGenMs) + " с]"
                             } catch (e: Exception) {
                                 e.message ?: "Ошибка"
                             }
