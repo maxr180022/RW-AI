@@ -48,6 +48,7 @@ class AndroidToolExecutor(
 
     override suspend fun execute(call: ToolCall): ToolResult = when (call.tool) {
         "launch_app" -> launchApp(call.str("app").orEmpty())
+        "open_settings" -> openSettings(call.str("page").orEmpty(), call.str("app"))
         "open_url" -> openUrl(call.str("url").orEmpty())
         "web_search" -> webSearch(call.str("query").orEmpty())
         "fetch_page" -> fetchPage(call.str("url").orEmpty())
@@ -110,6 +111,41 @@ class AndroidToolExecutor(
             if (svc.currentPackage() == pkg) return ToolResult.ok("Открыто: ${labelOf(pkg)} ($pkg).")
         }
         return ToolResult.failed("Запуск отправлен, но «${labelOf(pkg)}» не вышло на передний план (возможно, ограничения Android на запуск из фона).")
+    }
+
+    /** Прямой переход на страницу системных настроек. Банковские приложения закрыты, как и для запуска. */
+    private suspend fun openSettings(page: String, app: String?): ToolResult {
+        val pkg: String? = if (app.isNullOrBlank()) null else {
+            if (BankGuard.isBankingLabel(app)) return ToolResult.failed(BankGuard.REFUSAL)
+            val p = resolvePackage(app) ?: return ToolResult.failed("Приложение «$app» не найдено среди установленных.")
+            if (BankGuard.isBanking(p, labelOf(p))) return ToolResult.failed(BankGuard.REFUSAL)
+            p
+        }
+        val intent: Intent = when (page) {
+            "app_details" -> pkg?.let { Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + it)) }
+            "app_notifications" -> pkg?.let { Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, it) }
+            "battery_optimization" -> Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            "battery" -> Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+            "wifi" -> Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+            "bluetooth" -> Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+            "sound" -> Intent(android.provider.Settings.ACTION_SOUND_SETTINGS)
+            "display" -> Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS)
+            "accessibility" -> Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            "apps" -> Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)
+            "location" -> Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            "notification_policy" -> Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+            "main" -> Intent(android.provider.Settings.ACTION_SETTINGS)
+            else -> null
+        } ?: return ToolResult.failed("Для страницы «$page» нужно указать приложение (аргумент app) или такой страницы нет.")
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (isLocked()) return lockedResult()
+        try {
+            (RwAccessibilityService.instance ?: context).startActivity(intent)
+        } catch (e: Exception) {
+            return ToolResult.failed("Не удалось открыть страницу настроек: ${e.javaClass.simpleName}.")
+        }
+        delay(1200)
+        return ToolResult.ok("Открыта страница настроек «$page»" + (pkg?.let { " для " + labelOf(it) } ?: "") + ". Осмотри экран (inspect_screen) и нажимай нужные пункты.")
     }
 
     private suspend fun openUrl(url: String): ToolResult {

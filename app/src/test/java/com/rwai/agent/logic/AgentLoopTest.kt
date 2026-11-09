@@ -220,6 +220,16 @@ class AgentLoopTest {
         assertEquals(AgentOutcome.Stopped("Достигнут лимит шагов (5). Задача не завершена.", 5), out)
     }
 
+    @Test fun stepLimitExplainsWhatWasDone() = runBlocking {
+        var n = 0
+        val model = object : ModelClient {
+            override suspend fun complete(messages: List<ChatMessage>): String =
+                if (messages.last().content.startsWith("Лимит шагов исчерпан")) "Открыл настройки батареи, но не нашёл пункт исключений." else act("wait", """{"ms":${200 + (n++)}}""")
+        }
+        val out = loop(model, FakeExecutor(), config = AgentLoopConfig(maxSteps = 4)).run("жди")
+        assertEquals(AgentOutcome.Stopped("Достигнут лимит шагов (4). Задача не завершена. Открыл настройки батареи, но не нашёл пункт исключений.", 4), out)
+    }
+
     @Test fun toolTimeoutIsReportedToModel() = runBlocking {
         val model = ScriptedModel(listOf(act("press_back"), finish(false, "не удалось")))
         val exec = FakeExecutor(handler = { kotlinx.coroutines.delay(60_000); ToolResult.ok("поздно") })

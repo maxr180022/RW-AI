@@ -60,6 +60,15 @@ object ToolCatalog {
             timeoutMs = 10_000,
         ),
         ToolSpec(
+            name = "open_settings",
+            description = "Сразу открыть нужную страницу системных настроек, вместо долгого перехода по меню Настроек (экономит шаги). Страницы: app_details (сведения о приложении: Батарея, Разрешения, Хранилище; нужен app), app_notifications (уведомления приложения; нужен app), battery_optimization (список приложений и оптимизация батареи), battery (энергосбережение), wifi, bluetooth, sound, display, accessibility, apps (все приложения), location, notification_policy (доступ к режиму «Не беспокоить»), main (главная страница Настроек). Только открывает страницу, ничего не меняет: переключатели на ней нажимаешь сам по шагам.",
+            args = listOf(
+                ArgSpec("page", ArgType.STRING, "Страница настроек из списка", maxLen = 40, allowed = listOf("app_details", "app_notifications", "battery_optimization", "battery", "wifi", "bluetooth", "sound", "display", "accessibility", "apps", "location", "notification_policy", "main")),
+                ArgSpec("app", ArgType.STRING, "Название приложения или пакет (для app_details и app_notifications)", required = false, maxLen = 120),
+            ),
+            timeoutMs = 10_000,
+        ),
+        ToolSpec(
             name = "open_url",
             description = "Открыть http/https-ссылку в браузере.",
             args = listOf(ArgSpec("url", ArgType.STRING, "Адрес, начинающийся с https:// или http://", maxLen = 1000)),
