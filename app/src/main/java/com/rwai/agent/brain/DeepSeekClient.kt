@@ -58,7 +58,8 @@ class DeepSeekClient(
         val totalChars = messages.sumOf { it.content.length }
         if (totalChars > MAX_REQUEST_CHARS) throw ModelException("Запрос слишком большой ($totalChars символов).")
 
-        val body = buildBody(model, thinking, messages)
+        val wantJson = source == "agent" && !thinking && !jsonModeBroken
+        var body = buildBody(model, thinking, messages, wantJson)
         var attempt = 0
         var lastError: ModelException? = null
         while (attempt <= MAX_RETRIES) {
@@ -70,6 +71,12 @@ class DeepSeekClient(
                 throw e
             } catch (e: ModelException) {
                 lastError = e
+                val text = e.message.orEmpty()
+                if (wantJson && !jsonModeBroken && (text.contains("(400)") || text.contains("(422)"))) {
+                    jsonModeBroken = true // режим «только JSON» не поддержан этой моделью: дальше без него
+                    body = buildBody(model, thinking, messages, false)
+                    continue
+                }
                 if (!e.retryable) throw e
             }
         }
@@ -114,7 +121,9 @@ class DeepSeekClient(
         }
     }
 
-    internal fun buildBody(model: String, thinking: Boolean, messages: List<ChatMessage>): String {
+    @Volatile private var jsonModeBroken = false
+
+    internal fun buildBody(model: String, thinking: Boolean, messages: List<ChatMessage>, json: Boolean = false): String {
         val map = LinkedHashMap<String, Any?>()
         map["model"] = model
         map["messages"] = messages.map { m ->
@@ -131,6 +140,7 @@ class DeepSeekClient(
         map["thinking"] = mapOf("type" to if (thinking) "enabled" else "disabled")
         map["max_tokens"] = if (thinking) 32768 else 4096
         if (!thinking) map["temperature"] = 0.2 // в режиме thinking температура не действует
+        if (json && !thinking) map["response_format"] = mapOf("type" to "json_object") // шаги агента: только валидный JSON, меньше отказов формата
         return Json.stringify(map)
     }
 

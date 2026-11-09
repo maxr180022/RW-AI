@@ -35,7 +35,8 @@ object ActionParser {
         return AgentDecision.Invalid(lastError)
     }
 
-    private fun interpret(obj: Map<String, Any?>): AgentDecision {
+    private fun interpret(raw: Map<String, Any?>): AgentDecision {
+        val obj = normalize(raw)
         val kinds = listOf("action", "finish", "ask").filter { obj.containsKey(it) }
         if (kinds.isEmpty()) return AgentDecision.Invalid("Ожидалось поле action, finish или ask.")
         if (kinds.size > 1) return AgentDecision.Invalid("В ответе должно быть только одно из полей action / finish / ask.")
@@ -64,6 +65,23 @@ object ActionParser {
                 else AgentDecision.Act((obj["thought"] as? String).orEmpty().take(1000), call)
             }
         }
+    }
+
+    /**
+     * Модель часто «сплющивает» ответ: {"tool":"x","args":{}}, {"action":"x","args":{}} или стиль вызова функций ({"name":"x","arguments":"{...}"}).
+     * Приводим это к строгому виду {"action":{"tool","args"}}; дальше проверка по каталогу инструментов та же, ничего лишнего выполнить нельзя.
+     */
+    private fun normalize(o: Map<String, Any?>): Map<String, Any?> {
+        if (o.containsKey("finish") || o.containsKey("ask")) return o
+        val act = o["action"]
+        if (act is Map<*, *>) return o
+        val tool = (act as? String) ?: (o["tool"] as? String) ?: (o["tool_name"] as? String) ?: (o["name"] as? String)
+        if (tool.isNullOrBlank()) return o
+        val rawArgs = o["args"] ?: o["arguments"] ?: o["parameters"] ?: o["input"]
+        val args: Any? = if (rawArgs is String) { try { Json.parse(rawArgs) } catch (e: JsonParseException) { null } } else rawArgs
+        val drop = setOf("action", "tool", "tool_name", "name", "args", "arguments", "parameters", "input")
+        val rest = o.filterKeys { it !in drop }
+        return rest + mapOf("action" to mapOf("tool" to tool.trim(), "args" to (args ?: emptyMap<String, Any?>())))
     }
 
     /** Удаляет блоки рассуждений и ограды кода, чтобы JSON искался в «чистом» тексте. */

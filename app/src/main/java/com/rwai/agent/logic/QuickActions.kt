@@ -15,6 +15,14 @@ sealed interface QuickAction {
     data object Battery : QuickAction
     /** [kind]: play, pause, next, previous. */
     data class Media(val kind: String) : QuickAction
+    data object TimeNow : QuickAction
+    /** [percent] 1-100 или [steps] шагов ярче (плюс) или темнее (минус). */
+    data class Brightness(val percent: Int?, val steps: Int) : QuickAction
+    /** [mode]: silent, vibrate, normal. */
+    data class Ringer(val mode: String) : QuickAction
+    data class PlayMusic(val query: String) : QuickAction
+    data class Weather(val city: String?) : QuickAction
+    data object CalendarToday : QuickAction
 }
 
 object QuickActions {
@@ -27,6 +35,12 @@ object QuickActions {
         is QuickAction.OpenApp -> "открыть приложение: " + a.name
         QuickAction.Battery -> "заряд батареи"
         is QuickAction.Media -> "плеер: " + a.kind
+        QuickAction.TimeNow -> "время и дата"
+        is QuickAction.Brightness -> a.percent?.let { "яркость: $it %" } ?: ("яркость: " + (if (a.steps > 0) "ярче" else "темнее"))
+        is QuickAction.Ringer -> "режим звука: " + (when (a.mode) { "silent" -> "без звука"; "vibrate" -> "вибрация"; else -> "со звуком" })
+        is QuickAction.PlayMusic -> "включить: " + a.query
+        is QuickAction.Weather -> "погода" + (a.city?.let { " в $it" } ?: "")
+        QuickAction.CalendarToday -> "календарь на сегодня"
     }
 
     fun timerText(seconds: Int): String = when {
@@ -68,6 +82,19 @@ object QuickRules {
     private val mediaNext = Regex("^(следующий трек|следующая песня|включи следующий трек|включи следующую песню)$")
     private val mediaPrev = Regex("^(предыдущий трек|предыдущая песня|включи предыдущий трек|включи предыдущую песню)$")
 
+    private val timeNow = Regex("^(который час|сколько (сейчас )?времени|сколько время|какое (сегодня )?число|какой (сегодня )?день( недели)?|какая (сегодня )?дата|скажи время|скажи который час)$")
+    private val brightSet = Regex("^(поставь|сделай|установи|выставь) яркость( экрана)? (на )?(\\d{1,3})( процентов| процента| процент)?$")
+    private val brightUp = Regex("^((сделай )?(ярче|поярче)( экран)?|(прибавь|увеличь|добавь) яркость)$")
+    private val brightDown = Regex("^((сделай )?(темнее|потемнее|тусклее)( экран)?|(убавь|уменьши|понизь) яркость)$")
+    private val ringerSilent = Regex("^((включи|поставь|переключи) (беззвучный режим|режим без звука|тихий режим|без звука)|выключи звук телефона)$")
+    private val ringerVibrate = Regex("^(включи|поставь|переключи) (режим вибрации|вибрацию|вибро|на вибрацию)$")
+    private val ringerNormal = Regex("^(включи|верни) (звук|обычный режим|звуковой режим|звук телефона|со звуком)$")
+    private val weather = Regex("^(какая )?(погода|погода сейчас|погода сегодня)$")
+    private val weatherCity = Regex("^(какая )?погода (в|во) (.{2,30})$")
+    private val calendarToday = Regex("^((что|какие) (у меня )?(сегодня )?(в календаре|планы|дела)( на сегодня| сегодня)?|какие (у меня )?планы( на сегодня)?)$")
+    private val playMusic = Regex("^(включи|поставь|запусти) (песню|трек|музыку|альбом|плейлист) (.{2,80})$")
+    private val musicNotAQuery = setOf("громче", "тише", "потише", "погромче", "дальше", "на паузу", "сначала")
+
     private val openStop = setOf("и", "потом", "затем", "напиши", "отправь", "ответь", "найди", "позвони", "расскажи", "покажи", "прочитай", "включи", "выключи")
 
     fun match(text: String): QuickAction? {
@@ -102,6 +129,23 @@ object QuickRules {
             val sec = when { unit.startsWith("сек") -> n; unit.startsWith("мин") -> n * 60; unit.startsWith("час") -> n * 3600; else -> return null }
             return if (sec in 1..86_400) QuickAction.Timer(sec) else null
         }
+        if (timeNow.matches(s)) return QuickAction.TimeNow
+        brightSet.matchEntire(s)?.let { m ->
+            val p = m.groupValues[4].toIntOrNull() ?: return null
+            return if (p in 1..100) QuickAction.Brightness(p, 0) else null
+        }
+        if (brightUp.matches(s)) return QuickAction.Brightness(null, 2)
+        if (brightDown.matches(s)) return QuickAction.Brightness(null, -2)
+        if (ringerSilent.matches(s)) return QuickAction.Ringer("silent")
+        if (ringerVibrate.matches(s)) return QuickAction.Ringer("vibrate")
+        if (ringerNormal.matches(s)) return QuickAction.Ringer("normal")
+        if (weather.matches(s)) return QuickAction.Weather(null)
+        weatherCity.matchEntire(s)?.let { return QuickAction.Weather(it.groupValues[3].trim()) }
+        if (calendarToday.matches(s)) return QuickAction.CalendarToday
+        playMusic.matchEntire(s)?.let { m ->
+            val q = m.groupValues[3].trim()
+            if (q.length >= 2 && q !in musicNotAQuery) return QuickAction.PlayMusic(q)
+        }
         if (battery.matches(s)) return QuickAction.Battery
         if (mediaPause.matches(s)) return QuickAction.Media("pause")
         if (mediaPlay.matches(s)) return QuickAction.Media("play")
@@ -122,7 +166,7 @@ object QuickRules {
 object QuickDispatch {
     private val hints = listOf(
         "фонар", "громк", "звук", "громче", "тише", "будиль", "таймер", "не беспок", "заряд", "пауз", "трек", "песн", "музык", "разбуд",
-        "включи", "выключи", "отключи", "открой", "запусти", "убавь", "прибавь", "поставь",
+        "включи", "выключи", "отключи", "открой", "запусти", "убавь", "прибавь", "поставь", "яркост", "ярче", "темнее", "вибр", "беззвуч", "погод",
     )
     private val stops = listOf(
         "напиши", "ответь", "отправь", "найди", "расскажи", "переведи", "составь", "прочитай", "почт", "сообщен", "письм", "видео", "ссылк", "сайт",
@@ -151,6 +195,13 @@ object QuickDispatch {
             "open_app: name (название приложения)\n" +
             "battery: без полей, вопрос про заряд\n" +
             "media: kind (play, pause, next или previous)\n" +
+            "brightness: percent (1-100) яркость экрана\n" +
+            "brightness_step: steps (целое от -5 до 5; плюс ярче, минус темнее)\n" +
+            "ringer: mode (silent без звука, vibrate вибрация, normal со звуком)\n" +
+            "weather: city (необязательно) вопрос про погоду\n" +
+            "play_music: query (что включить)\n" +
+            "time: без полей, вопрос про время или дату\n" +
+            "calendar: без полей, вопрос про события сегодня\n" +
             "Команда: «" + text.trim().take(120) + "»"
 
     private const val MIN_CONFIDENCE = 0.8
@@ -177,6 +228,13 @@ object QuickDispatch {
             "open_app" -> (map["name"] as? String)?.trim()?.takeIf { it.length in 2..30 && it.split(' ').size <= 3 }?.let { QuickAction.OpenApp(it) }
             "battery" -> QuickAction.Battery
             "media" -> (map["kind"] as? String)?.takeIf { it in setOf("play", "pause", "next", "previous") }?.let { QuickAction.Media(it) }
+            "brightness" -> int("percent")?.takeIf { it in 1..100 }?.let { QuickAction.Brightness(it, 0) }
+            "brightness_step" -> int("steps")?.takeIf { it in -5..5 && it != 0 }?.let { QuickAction.Brightness(null, it) }
+            "ringer" -> (map["mode"] as? String)?.takeIf { it in setOf("silent", "vibrate", "normal") }?.let { QuickAction.Ringer(it) }
+            "weather" -> QuickAction.Weather((map["city"] as? String)?.trim()?.takeIf { it.length in 2..40 })
+            "play_music" -> (map["query"] as? String)?.trim()?.takeIf { it.length in 2..100 }?.let { QuickAction.PlayMusic(it) }
+            "time" -> QuickAction.TimeNow
+            "calendar" -> QuickAction.CalendarToday
             else -> null
         }
     }

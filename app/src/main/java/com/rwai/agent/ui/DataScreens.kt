@@ -129,6 +129,9 @@ private fun DigestCards(ts: Long?, text: String) {
     val items = remember(text) { DigestView.parse(text) }
     var answered by remember { mutableStateOf(AnsweredStore.raw()) }
     var skipped by remember { mutableStateOf(com.rwai.agent.digest.SkippedStore.raw()) }
+    var drafting by remember { mutableStateOf<String?>(null) }
+    val draftScope = rememberCoroutineScope()
+    val draftCtx = LocalContext.current
     var composing by remember(text) { mutableStateOf<String?>(null) } // ключ карточки, у которой открыто поле «что сделать»
     var draft by remember(text) { mutableStateOf("") }
     var hint by remember(text) { mutableStateOf<Pair<String, String>?>(null) } // (ключ карточки, текст подсказки)
@@ -195,7 +198,23 @@ private fun DigestCards(ts: Long?, text: String) {
                             composing = if (composing == key) null else key
                             hint = null
                         }
-                        ActionPill("Предложить ответ", compact = true) { send(DigestView.suggestTask(it0), false) }
+                        ActionPill(if (drafting == key) "Пишу…" else "Предложить ответ", compact = true) {
+                            if (drafting != null) return@ActionPill
+                            val who0 = it0.person()
+                            if (who0 != null && com.rwai.agent.core.LightLlm.localPreferred(draftCtx)) {
+                                // Черновик пишет локальная модель: без токенов и без хождения по экранам. Не вышло: как раньше, через агента.
+                                drafting = key
+                                draftScope.launch {
+                                    val suggestion = com.rwai.agent.core.LightLlm.suggestReply(draftCtx, who0.first, it0.body)
+                                    drafting = null
+                                    if (suggestion != null) {
+                                        composing = key
+                                        draft = suggestion
+                                        hint = key to "Черновик от локальной модели (без токенов). Поправьте и нажмите «Отправить как есть» или «Поручить агенту»."
+                                    } else send(DigestView.suggestTask(it0), false)
+                                }
+                            } else send(DigestView.suggestTask(it0), false)
+                        }
                         ActionPill("Пропустить", compact = true) {
                             skipped = com.rwai.agent.digest.SkippedStore.skip(key)
                             it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.mark(who.first) }

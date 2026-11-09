@@ -10,6 +10,7 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.AlarmClock
+import android.provider.Settings
 import com.rwai.agent.Graph
 import com.rwai.agent.executor.AndroidToolExecutor
 import com.rwai.agent.logic.BankGuard
@@ -42,6 +43,12 @@ object QuickExecutor {
                 is QuickAction.OpenApp -> viaTool(ctx, ToolCall("launch_app", mapOf("app" to a.name)))
                 QuickAction.Battery -> viaTool(ctx, ToolCall("phone_status"))
                 is QuickAction.Media -> viaTool(ctx, ToolCall("media_control", mapOf("action" to a.kind)))
+                QuickAction.TimeNow -> timeNow()
+                is QuickAction.Brightness -> brightness(ctx, a)
+                is QuickAction.Ringer -> ringer(ctx, a.mode)
+                is QuickAction.PlayMusic -> viaTool(ctx, ToolCall("play_music", mapOf("query" to a.query)))
+                is QuickAction.Weather -> viaTool(ctx, ToolCall("weather", if (a.city != null) mapOf("city" to a.city) else emptyMap()))
+                QuickAction.CalendarToday -> viaTool(ctx, ToolCall("calendar_events", mapOf("days" to 1L)))
             }
         } catch (e: SecurityException) {
             QuickResult(false, "Системе не хватило разрешения для действия «" + QuickActions.label(a) + "»: " + (e.message ?: "").take(100))
@@ -55,7 +62,7 @@ object QuickExecutor {
     private suspend fun viaTool(ctx: Context, call: ToolCall): QuickResult {
         val ex = AndroidToolExecutor(ctx, Graph.db, Graph.settings, Graph.speaker) { }
         val r = ex.execute(call)
-        val text = r.message.trim()
+        val text = r.message.trim().replace(Regex(" \\([a-zA-Z0-9_.]+\\)"), "")
         return when {
             r.status == ToolStatus.OK -> QuickResult(true, text.take(400))
             text == BankGuard.REFUSAL -> QuickResult(true, text) // отказ по банкам окончательный, агенту его не отдаём
@@ -100,6 +107,38 @@ object QuickExecutor {
         return QuickResult(true, "Громкость музыки: " + am.getStreamVolume(AudioManager.STREAM_MUSIC) + " из $max.")
     }
 
+    // ---------------------------------------------------------------- время, яркость, режим звука
+
+    private fun timeNow(): QuickResult {
+        val now = java.time.ZonedDateTime.now()
+        val date = now.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", java.util.Locale.forLanguageTag("ru")))
+        return QuickResult(true, "Сейчас " + "%02d:%02d".format(now.hour, now.minute) + ", " + date + ".")
+    }
+
+    private fun brightness(ctx: Context, a: QuickAction.Brightness): QuickResult {
+        if (!Settings.System.canWrite(ctx)) {
+            return QuickResult(false, "Нет доступа к изменению яркости. Дайте его: Ещё → Настройки → Параметры → Быстрые действия → «Дать доступ к яркости».")
+        }
+        val cr = ctx.contentResolver
+        val cur = Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS, 128)
+        val want = (if (a.percent != null) Math.round(a.percent * 2.55f) else cur + a.steps * 25).coerceIn(5, 255)
+        Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS, want)
+        val now = Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS, want)
+        return if (Math.abs(now - want) <= 1) QuickResult(true, "Яркость: " + Math.round(now / 2.55f) + " %.") else QuickResult(false, "Яркость не изменилась: система не дала поменять.")
+    }
+
+    private fun ringer(ctx: Context, mode: String): QuickResult {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val want = when (mode) { "silent" -> AudioManager.RINGER_MODE_SILENT; "vibrate" -> AudioManager.RINGER_MODE_VIBRATE; else -> AudioManager.RINGER_MODE_NORMAL }
+        if (want == AudioManager.RINGER_MODE_SILENT) {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (!nm.isNotificationPolicyAccessGranted) return QuickResult(false, "Для беззвучного режима нужен доступ к «Не беспокоить»: Ещё → Настройки → Параметры → Быстрые действия.")
+        }
+        am.ringerMode = want
+        return if (am.ringerMode == want) QuickResult(true, when (mode) { "silent" -> "Беззвучный режим включён."; "vibrate" -> "Режим вибрации включён."; else -> "Звук включён." })
+        else QuickResult(false, "Режим звука не изменился: система не дала поменять.")
+    }
+
     // ---------------------------------------------------------------- «Не беспокоить»
 
     private suspend fun dnd(ctx: Context, on: Boolean): QuickResult {
@@ -117,22 +156,38 @@ object QuickExecutor {
 
     // ---------------------------------------------------------------- будильник и таймер
 
+    /**
+     * Будильник через системный запрос «Часам». Проверка: Android показывает приложению только ближайший будильник. Если новый становится ближайшим, он должен появиться
+     * и это подтверждается. Если у вас есть будильник раньше нового, по системе подтвердить нельзя: так и пишем, без тревоги.
+     */
     private suspend fun alarm(ctx: Context, a: QuickAction.Alarm): QuickResult {
-        val intent = Intent(AlarmClock.ACTION_SET_ALARM)
-            .putExtra(AlarmClock.EXTRA_HOUR, a.hour)
-            .putExtra(AlarmClock.EXTRA_MINUTES, a.minute)
-            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.startActivity(intent)
-        delay(900)
-        val label = "%02d:%02d".format(a.hour, a.minute)
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val before = am.nextAlarmClock?.triggerTime
         val expected = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, a.hour); set(Calendar.MINUTE, a.minute); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
         }.timeInMillis
-        val next = (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager).nextAlarmClock?.triggerTime
-        return if (next != null && Math.abs(next - expected) < 90_000) QuickResult(true, "Будильник на $label поставлен (проверено по системе).")
-        else QuickResult(true, "Будильник на $label отправлен в «Часы». Проверить по системе не вышло (ближайший у вас другой): загляните в список будильников.")
+        ctx.startActivity(
+            Intent(AlarmClock.ACTION_SET_ALARM)
+                .putExtra(AlarmClock.EXTRA_HOUR, a.hour)
+                .putExtra(AlarmClock.EXTRA_MINUTES, a.minute)
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        val label = "%02d:%02d".format(a.hour, a.minute)
+        var after: Long? = null
+        repeat(3) {
+            delay(900)
+            after = am.nextAlarmClock?.triggerTime
+            if (after != null && Math.abs(after!! - expected) < 90_000) return QuickResult(true, "Будильник на $label поставлен (подтверждено системой).")
+        }
+        val earlierExists = before != null && before < expected - 90_000
+        return if (earlierExists) {
+            val other = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(before!!))
+            QuickResult(true, "Будильник на $label поставлен. Подтвердить по системе нельзя: она показывает только ближайший будильник (у вас он на $other).")
+        } else {
+            QuickResult(true, "Будильник на $label отправлен в «Часы», но система его не показала как ближайший. Проверьте список будильников.")
+        }
     }
 
     private fun timer(ctx: Context, a: QuickAction.Timer): QuickResult {

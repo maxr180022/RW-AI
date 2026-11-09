@@ -3,6 +3,7 @@ package com.rwai.agent.ui
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.rwai.agent.Graph
+import com.rwai.agent.core.LightLlm
 import com.rwai.agent.core.QuickRouter
 import com.rwai.agent.local.LocalModelStore
 import java.text.SimpleDateFormat
@@ -30,6 +32,8 @@ fun QuickSettings() {
     var enabled by remember { mutableStateOf(QuickRouter.enabled(ctx)) }
     var local by remember { mutableStateOf(QuickRouter.localEnabled(ctx)) }
     var dnd by remember { mutableStateOf(dndGranted(ctx)) }
+    var bg by remember { mutableStateOf(LightLlm.backgroundEnabled(ctx)) }
+    var write by remember { mutableStateOf(Settings.System.canWrite(ctx)) }
     var tick by remember { mutableIntStateOf(0) }
     val log = remember(tick) { try { Graph.db.recentRouteLog(10) } catch (_: Exception) { emptyList() } }
     val counts = remember(tick) { try { Graph.db.routeCounts() } catch (_: Exception) { 0 to 0 } }
@@ -50,11 +54,18 @@ fun QuickSettings() {
             if (LocalModelStore.isReady(ctx)) "Локальная модель скачана." else "Локальная модель не скачана: работают только точные фразы.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        SwitchRow(
+            "Фоновые тексты на локальной модели",
+            "Перевод входящих, сводки, сводка уведомлений и черновики ответов («Предложить ответ» во «Входящих») пишет локальная модель: без токенов, без интернета и без хождения по экранам. Если модель не скачана или ответила не по формату, работает DeepSeek.",
+            bg,
+        ) { v -> LightLlm.setBackground(ctx, v); bg = v }
+        val st = LightLlm.stats(ctx)
+        Text("Фоновых текстов: локально ${st.first} · через DeepSeek ${st.second}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     SettingsGroup("Примеры точных фраз") {
         Text(
-            "«Включи фонарик», «выключи фонарик»\n«Поставь будильник на 7:30», «таймер на 10 минут»\n«Громкость на 40», «громче», «тише»\n«Выключи режим не беспокоить»\n«Какой заряд», «пауза», «следующий трек»\n«Открой Telegram»",
+            "«Включи фонарик», «выключи фонарик»\n«Поставь будильник на 7:30», «таймер на 10 минут»\n«Громкость на 40», «громче», «тише»\n«Выключи режим не беспокоить»\n«Какой заряд», «пауза», «следующий трек»\n«Открой Telegram»\n«Какая погода», «который час», «что у меня в календаре»\n«Яркость на 50», «ярче», «темнее»\n«Включи вибрацию», «беззвучный режим», «включи звук»\n«Включи песню …»",
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -67,7 +78,11 @@ fun QuickSettings() {
         if (!dnd) ActionPill("Дать доступ", accent = true) {
             try { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
         }
-        ActionPill("Проверить доступ") { dnd = dndGranted(ctx); tick++ }
+        ActionPill("Проверить доступ") { dnd = dndGranted(ctx); write = Settings.System.canWrite(ctx); tick++ }
+        Text("Яркость: " + if (write) "доступ дан ✓" else "нужен доступ к изменению системных настроек", style = MaterialTheme.typography.bodyMedium)
+        if (!write) ActionPill("Дать доступ к яркости", accent = true) {
+            try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { }
+        }
         Text(
             "Будильник и таймер работают без особого доступа.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -95,6 +95,33 @@ class QuickActionsTest {
         assertNull(QuickDispatch.parse("""{"action":"format_disk","confidence":1.0}"""))
     }
 
+    @Test fun timeBrightnessRingerWeatherCalendarMusic() {
+        assertEquals(QuickAction.TimeNow, m("который час"))
+        assertEquals(QuickAction.TimeNow, m("Какое сегодня число?"))
+        assertEquals(QuickAction.Brightness(50, 0), m("поставь яркость на 50"))
+        assertEquals(QuickAction.Brightness(null, 2), m("ярче"))
+        assertEquals(QuickAction.Brightness(null, -2), m("сделай потемнее"))
+        assertNull(m("поставь яркость на 0"))
+        assertEquals(QuickAction.Ringer("silent"), m("включи беззвучный режим"))
+        assertEquals(QuickAction.Ringer("vibrate"), m("включи вибрацию"))
+        assertEquals(QuickAction.Ringer("normal"), m("включи звук"))
+        assertEquals(QuickAction.Weather(null), m("какая погода"))
+        assertEquals(QuickAction.Weather("перми"), m("какая погода в перми"))
+        assertEquals(QuickAction.CalendarToday, m("что у меня сегодня в календаре"))
+        assertEquals(QuickAction.PlayMusic("кино группа крови"), m("включи песню кино группа крови"))
+        assertNull(m("включи музыку громче"))
+        assertEquals(QuickAction.Media("play"), m("включи музыку"))
+    }
+
+    @Test fun modelAnswerForNewActionsIsParsed() {
+        assertEquals(QuickAction.Brightness(30, 0), QuickDispatch.parse("""{"action":"brightness","percent":30,"confidence":0.9}"""))
+        assertEquals(QuickAction.Ringer("vibrate"), QuickDispatch.parse("""{"action":"ringer","mode":"vibrate","confidence":0.9}"""))
+        assertEquals(QuickAction.Weather("Монтевидео"), QuickDispatch.parse("""{"action":"weather","city":"Монтевидео","confidence":0.9}"""))
+        assertEquals(QuickAction.TimeNow, QuickDispatch.parse("""{"action":"time","confidence":0.9}"""))
+        assertNull(QuickDispatch.parse("""{"action":"ringer","mode":"explode","confidence":0.99}"""))
+        assertNull(QuickDispatch.parse("""{"action":"brightness","percent":500,"confidence":0.99}"""))
+    }
+
     @Test fun labelsAreReadable() {
         assertEquals("фонарик: выключить", QuickActions.label(QuickAction.Flashlight(false)))
         assertEquals("будильник: 07:05", QuickActions.label(QuickAction.Alarm(7, 5)))
