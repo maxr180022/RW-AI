@@ -355,7 +355,7 @@ fun SettingsScreen() {
 
         SectionTitle("Расход токенов")
         var cap by remember(settings.dailyTokenCap) { mutableStateOf(settings.dailyTokenCap.toString()) }
-        Text("Сегодня использовано токенов: $tokensToday", style = MaterialTheme.typography.bodyMedium)
+        Text("Сегодня использовано токенов: ${com.rwai.agent.logic.UsageView.group(tokensToday)}", style = MaterialTheme.typography.bodyMedium)
         com.rwai.agent.logic.UsageView.lines(usage).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         OutlinedButton(onClick = { tokensToday = Graph.settings.tokensUsedToday(); usage = Graph.settings.usageToday() }) { Text("Обновить счётчик") }
         OutlinedTextField(
@@ -372,7 +372,9 @@ fun SettingsScreen() {
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные Руся AI (память, уведомления, журнал)") }
-        Text("Руся AI 0.4.0", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
+        val appCtx = androidx.compose.ui.platform.LocalContext.current
+        val appVersion = remember { try { appCtx.packageManager.getPackageInfo(appCtx.packageName, 0).versionName } catch (_: Exception) { null } ?: "" }
+        Text("Руся AI $appVersion", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 12.dp))
     }
 
     if (confirmDeleteKey) {
