@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Запуск локальной модели (Gemma 4 E4B через LiteRT-LM). Движок поднимается при первом запросе (загрузка модели занимает секунды),
- * держится в памяти, пока им пользуются, и сам выгружается через минуту простоя, чтобы не занимать оперативную память телефона.
+ * держится в памяти, пока им пользуются, и сам выгружается через пять минут простоя, чтобы не занимать оперативную память телефона.
  * Нет файла модели или она не запустилась — бросает [LocalModelException], вызывающий откатывается на DeepSeek.
  */
 object LocalLlm {
@@ -30,6 +30,12 @@ object LocalLlm {
 
     /** Каким устройством считает движок: «видеоускоритель» или «процессор» (после первого запроса). */
     fun backend(): String = backendName
+
+    /** Сколько мс заняла загрузка модели в память при последнем запросе (0 — модель уже была в памяти) и сам ответ. */
+    @Volatile var lastLoadMs: Long = 0
+        private set
+    @Volatile var lastGenMs: Long = 0
+        private set
 
     private fun open(ctx: Context): Engine {
         val path = LocalModelStore.file(ctx)
@@ -53,8 +59,12 @@ object LocalLlm {
         withContext(Dispatchers.Default) {
             idleJob?.cancel()
             try {
+                val t0 = System.currentTimeMillis()
                 val e = engine ?: open(ctx.applicationContext).also { engine = it }
+                val t1 = System.currentTimeMillis()
+                lastLoadMs = if (t1 - t0 > 50) t1 - t0 else 0
                 val answer = e.createConversation().use { c -> c.sendMessage(prompt).toString() }
+                lastGenMs = System.currentTimeMillis() - t1
                 scheduleRelease()
                 answer.trim()
             } catch (t: LocalModelException) {
@@ -68,7 +78,7 @@ object LocalLlm {
 
     private fun scheduleRelease() {
         idleJob = scope.launch {
-            delay(60_000)
+            delay(300_000) // пять минут простоя: чтобы повторные запросы шли без загрузки
             release()
         }
     }
