@@ -628,7 +628,15 @@ class AgentController(
 
     /** Клиент модели с выбранным под задачу профилем: модель и режим рассуждения. */
     private inner class ProfiledModel(private val profile: ModelProfile) : ModelClient {
-        override suspend fun complete(messages: List<ChatMessage>): String = brain.completeWith(messages, profile.model, profile.thinking, "agent")
+        private var calls = 0
+
+        override suspend fun complete(messages: List<ChatMessage>): String {
+            calls++
+            val last = messages.lastOrNull { it.role == "user" }?.content.orEmpty()
+            // Рассуждение дорогое: оно нужно, чтобы спланировать задачу и разобраться с ошибкой, а не на каждом механическом шаге.
+            val think = if (AgentPrefs.economy(appContext)) com.rwai.agent.logic.ThinkingPolicy.shouldThink(profile.thinking, calls, last) else profile.thinking
+            return brain.completeWith(messages, profile.model, think, "agent")
+        }
     }
 
     private inner class UiConfirmer : Confirmer {

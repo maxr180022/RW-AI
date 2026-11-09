@@ -23,6 +23,7 @@ sealed interface QuickAction {
     data class PlayMusic(val query: String) : QuickAction
     data class Weather(val city: String?) : QuickAction
     data object CalendarToday : QuickAction
+    data class Call(val name: String) : QuickAction
 }
 
 object QuickActions {
@@ -41,6 +42,7 @@ object QuickActions {
         is QuickAction.PlayMusic -> "включить: " + a.query
         is QuickAction.Weather -> "погода" + (a.city?.let { " в $it" } ?: "")
         QuickAction.CalendarToday -> "календарь на сегодня"
+        is QuickAction.Call -> "позвонить: " + a.name
     }
 
     fun timerText(seconds: Int): String = when {
@@ -92,6 +94,8 @@ object QuickRules {
     private val weather = Regex("^(какая )?(погода|погода сейчас|погода сегодня)$")
     private val weatherCity = Regex("^(какая )?погода (в|во) (.{2,30})$")
     private val calendarToday = Regex("^((что|какие) (у меня )?(сегодня )?(в календаре|планы|дела)( на сегодня| сегодня)?|какие (у меня )?планы( на сегодня)?)$")
+    private val callRule = Regex("^(позвони|набери|вызови|звони) (.{2,40})$")
+    private val callNotPlain = listOf(" и ", " потом ", " в ватсап", " в whatsapp", " в телеграм", " в telegram", " в вайбер", " в инстаграм", " по ватсап", " по телеграм", " по видео")
     private val playMusic = Regex("^(включи|поставь|запусти) (песню|трек|музыку|альбом|плейлист) (.{2,80})$")
     private val musicNotAQuery = setOf("громче", "тише", "потише", "погромче", "дальше", "на паузу", "сначала")
 
@@ -142,6 +146,12 @@ object QuickRules {
         if (weather.matches(s)) return QuickAction.Weather(null)
         weatherCity.matchEntire(s)?.let { return QuickAction.Weather(it.groupValues[3].trim()) }
         if (calendarToday.matches(s)) return QuickAction.CalendarToday
+        callRule.matchEntire(s)?.let { m ->
+            val who = m.groupValues[2].trim()
+            // Звонок в мессенджере, цифры и составные просьбы не трогаем: их разбирает агент (или человек).
+            if (who.any { it.isDigit() } || callNotPlain.any { (" $who").contains(it) } || who.split(' ').size > 3) return null
+            return QuickAction.Call(who)
+        }
         playMusic.matchEntire(s)?.let { m ->
             val q = m.groupValues[3].trim()
             if (q.length >= 2 && q !in musicNotAQuery) return QuickAction.PlayMusic(q)
@@ -237,5 +247,39 @@ object QuickDispatch {
             "calendar" -> QuickAction.CalendarToday
             else -> null
         }
+    }
+}
+
+/** Контакт из телефонной книги: имя и номер. */
+data class ContactRef(val name: String, val number: String)
+
+/**
+ * Поиск контакта по тому, как человек сказал: «Саше», «маме», «Павлу Короткову». Русские падежи учитываются отбрасыванием окончания.
+ * Возвращает контакты с лучшим совпадением (уникальные по имени): один — можно звонить, несколько — переспросить.
+ */
+object ContactMatch {
+    fun norm(s: String): String = s.lowercase().replace('ё', 'е').replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
+
+    private fun wordTier(qw: String, words: List<String>): Int {
+        if (words.any { it == qw }) return 1
+        if (words.any { it.startsWith(qw) }) return 2
+        val stem = if (qw.length >= 4) qw.dropLast(1) else qw
+        if (stem.length >= 3 && words.any { it.startsWith(stem) }) return 3
+        if (qw.length >= 4 && words.any { it.startsWith(qw.take(3)) }) return 4
+        return 99
+    }
+
+    fun find(query: String, contacts: List<ContactRef>): List<ContactRef> {
+        val q = norm(query)
+        if (q.isEmpty()) return emptyList()
+        val qWords = q.split(' ')
+        val scored = contacts.mapNotNull { c ->
+            val n = norm(c.name)
+            val words = n.split(' ')
+            val tier = if (n == q) 0 else qWords.maxOf { wordTier(it, words) }
+            if (tier < 99) c to tier else null
+        }
+        val best = scored.minOfOrNull { it.second } ?: return emptyList()
+        return scored.filter { it.second == best }.map { it.first }.distinctBy { norm(it.name) }
     }
 }

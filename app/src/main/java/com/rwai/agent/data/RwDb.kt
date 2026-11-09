@@ -83,6 +83,23 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
         return out
     }
 
+    fun unauditedRouteLog(limit: Int): List<RouteLogRow> {
+        val out = ArrayList<RouteLogRow>()
+        readableDatabase.rawQuery("SELECT id, ts, source, command, action, ok, message, audit FROM route_log WHERE audit IS NULL ORDER BY id DESC LIMIT ?", arrayOf(limit.toString())).use { c ->
+            while (c.moveToNext()) out += RouteLogRow(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5) == 1, c.getString(6), c.getString(7))
+        }
+        return out
+    }
+
+    fun unauditedCount(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM route_log WHERE audit IS NULL", null).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+    fun setRouteAudit(id: Long, verdict: String) {
+        val v = ContentValues().apply { put("audit", verdict.take(200)) }
+        writableDatabase.update("route_log", v, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun allRouteLog(): List<RouteLogRow> = recentRouteLog(5000).reversed()
+
     /** (выполнено быстро, не вышло или отдано агенту) */
     fun routeCounts(): Pair<Int, Int> {
         var ok = 0; var bad = 0

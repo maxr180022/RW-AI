@@ -27,7 +27,7 @@ data class UsageLine(val source: String, val tokens: Int, val prompt: Int, val c
 
 object UsageView {
     /** Все источники, по которым ведётся счёт, в порядке показа. */
-    val SOURCES = listOf("agent", "translate", "digest", "notes", "phone", "other")
+    val SOURCES = listOf("agent", "translate", "digest", "notes", "phone", "audit", "other")
 
     fun label(source: String): String = when (source) {
         "agent" -> "Агент (шаги задач)"
@@ -35,6 +35,7 @@ object UsageView {
         "digest" -> "Сводки сообщений"
         "notes" -> "Сводка уведомлений"
         "phone" -> "Советы по телефону"
+        "audit" -> "Проверка журнала"
         else -> "Прочее"
     }
 

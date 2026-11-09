@@ -62,5 +62,6 @@ object QuickRouter {
 
     private fun log(command: String, source: String, action: String, ok: Boolean, message: String) {
         try { Graph.db.addRouteLog(source, redact(command), action, ok, redact(message)) } catch (_: Exception) { }
+        RouteAudit.maybeRun(Graph.appContext())
     }
 }

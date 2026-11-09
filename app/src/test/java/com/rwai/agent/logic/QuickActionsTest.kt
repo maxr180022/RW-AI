@@ -122,6 +122,40 @@ class QuickActionsTest {
         assertNull(QuickDispatch.parse("""{"action":"brightness","percent":500,"confidence":0.99}"""))
     }
 
+    @Test fun callByNameRuleIsStrict() {
+        assertEquals(QuickAction.Call("саше"), m("позвони Саше"))
+        assertEquals(QuickAction.Call("маме"), m("Руся, позвони маме"))
+        assertEquals(QuickAction.Call("павлу короткову"), m("набери Павлу Короткову"))
+        assertNull(m("позвони Саше в ватсап"))
+        assertNull(m("позвони Саше и скажи что я опоздаю"))
+        assertNull(m("позвони 112"))
+    }
+
+    @Test fun contactMatchHandlesRussianCases() {
+        val book = listOf(ContactRef("Саша Студия", "+1"), ContactRef("Александр Иванов", "+2"), ContactRef("Мама", "+3"), ContactRef("Павел Коротаев", "+4"), ContactRef("Женек", "+5"))
+        assertEquals(listOf("Саша Студия"), ContactMatch.find("саше", book).map { it.name })
+        assertEquals(listOf("Мама"), ContactMatch.find("маме", book).map { it.name })
+        assertEquals(listOf("Павел Коротаев"), ContactMatch.find("павлу коротаеву", book).map { it.name })
+        assertEquals(listOf("Женек"), ContactMatch.find("женьку", book).map { it.name })
+        assertTrue(ContactMatch.find("олегу", book).isEmpty())
+    }
+
+    @Test fun contactMatchReportsAmbiguityAndPrefersExact() {
+        val book = listOf(ContactRef("Саша Студия", "+1"), ContactRef("Саша", "+2"), ContactRef("Саша Дом", "+3"))
+        assertEquals(listOf("Саша"), ContactMatch.find("саша", book).map { it.name })
+        val two = listOf(ContactRef("Саша Студия", "+1"), ContactRef("Саша Дом", "+3"))
+        assertEquals(2, ContactMatch.find("саша", two).size)
+    }
+
+    @Test fun thinkingIsKeptForPlanningAndErrorsOnly() {
+        assertTrue(ThinkingPolicy.shouldThink(true, 1, "ЗАДАЧА ВЛАДЕЛЬЦА: x"))
+        assertTrue(ThinkingPolicy.shouldThink(true, 3, "РЕЗУЛЬТАТ tap_text: status=OK"))
+        assertFalse(ThinkingPolicy.shouldThink(true, 4, "РЕЗУЛЬТАТ tap_text: status=OK\nНажато"))
+        assertTrue(ThinkingPolicy.shouldThink(true, 9, "РЕЗУЛЬТАТ tap_text: status=FAILED\nНе найдено"))
+        assertTrue(ThinkingPolicy.shouldThink(true, 9, "ОШИБКА ФОРМАТА: нет JSON"))
+        assertFalse(ThinkingPolicy.shouldThink(false, 1, "ЗАДАЧА"))
+    }
+
     @Test fun labelsAreReadable() {
         assertEquals("фонарик: выключить", QuickActions.label(QuickAction.Flashlight(false)))
         assertEquals("будильник: 07:05", QuickActions.label(QuickAction.Alarm(7, 5)))

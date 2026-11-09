@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,50 +56,70 @@ import kotlinx.coroutines.withContext
 /** Разделы вкладки «Параметры». Вместо одной длинной ленты настроек: список разделов, каждый открывается отдельной страницей из карточек. */
 private enum class Page(val title: String) {
     HUB("Параметры"),
+    ACCESS("Доступ и разрешения"),
     AI("DeepSeek и модель"),
     AGENT("Поведение агента"),
     QUICK("Быстрые действия"),
+    CONNECTIONS("Подключения"),
     VOICE("Язык и голос"),
     CAR("Звук в машине (Bluetooth)"),
     PRIVACY("Сообщения и приватность"),
     WEB("Интернет и компьютер"),
+    PROFILE("Профиль"),
     LOCAL("Локальная модель"),
     TOKENS("Расход токенов"),
 }
 
+private fun initialPage(section: Int): Page = when (section) { 0 -> Page.ACCESS; 2 -> Page.PROFILE; 3 -> Page.CONNECTIONS; else -> Page.HUB }
+
 @Composable
-fun SettingsScreen() {
-    var pageIdx by rememberSaveable { mutableIntStateOf(0) }
+private fun PageHeader(title: String, horizontal: Int, onBack: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = horizontal.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            "‹  Все параметры",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { onBack() }.padding(vertical = 6.dp),
+        )
+        Text(title, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+@Composable
+fun SettingsScreen(resumeTick: Int = 0, section: Int = 1) {
+    var pageIdx by rememberSaveable(section) { mutableIntStateOf(initialPage(section).ordinal) }
     val page = Page.entries[pageIdx.coerceIn(0, Page.entries.lastIndex)]
     androidx.activity.compose.BackHandler(enabled = page != Page.HUB) { pageIdx = 0 }
 
-    if (page == Page.HUB) {
-        SettingsHub { pageIdx = it.ordinal }
-    } else {
-        Column(
+    when (page) {
+        Page.HUB -> SettingsHub { pageIdx = it.ordinal }
+        // Эти три раздела уже со своей прокруткой: показываем их под общим заголовком без вложенной прокрутки.
+        Page.ACCESS, Page.PROFILE, Page.CONNECTIONS -> Column(modifier = Modifier.fillMaxSize()) {
+            PageHeader(page.title, 12) { pageIdx = 0 }
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when (page) {
+                    Page.ACCESS -> PermissionsScreen(resumeTick)
+                    Page.PROFILE -> ProfileScreen()
+                    else -> ConnectionsScreen(resumeTick)
+                }
+            }
+        }
+        else -> Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(modifier = Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    "‹  Все параметры",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { pageIdx = 0 }.padding(vertical = 6.dp),
-                )
-                Text(page.title, style = MaterialTheme.typography.titleLarge)
-            }
+            PageHeader(page.title, 0) { pageIdx = 0 }
             when (page) {
                 Page.AI -> AiPage()
                 Page.AGENT -> AgentPage()
                 Page.QUICK -> QuickSettings()
                 Page.VOICE -> VoicePage()
-                Page.PRIVACY -> PrivacyPage()
                 Page.CAR -> CarAudioSettings()
+                Page.PRIVACY -> PrivacyPage()
                 Page.WEB -> WebPage()
                 Page.LOCAL -> SettingsGroup("Модель на телефоне") { LocalModelSettings() }
                 Page.TOKENS -> TokensPage()
-                Page.HUB -> Unit
+                else -> Unit
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -153,6 +175,9 @@ private fun SettingsHub(onOpen: (Page) -> Unit) {
             LocalModelStore.State.NONE -> "Не скачана · " + DownloadMath.human(local.total)
         }
         Page.TOKENS -> "Сегодня: " + UsageView.group(Graph.settings.tokensUsedToday())
+        Page.ACCESS -> "Уведомления: " + onOff(isNotificationAccessEnabled(ctx)) + " · специальные возможности: " + onOff(isAccessibilityEnabled(ctx))
+        Page.PROFILE -> (try { Graph.profile.values().size } catch (_: Exception) { 0 }).toString() + " полей заполнено (данные остаются на телефоне)"
+        Page.CONNECTIONS -> "Музыка, почта, YouTube, календарь, погода"
         Page.HUB -> ""
     }
 
@@ -300,8 +325,13 @@ private fun AiPage() {
         SwitchRow("Автовыбор модели", "Простые задачи (открыть, показать, найти) идут на быстрой модели, сложные (ответ человеку, документ, несколько шагов, юридическое, деньги) и всё неясное на выбранной модели с рассуждением. Точность важнее скорости.", settings.autoModel) { v ->
             Graph.settings.update { it.copy(autoModel = v) }
         }
+        val econCtx = androidx.compose.ui.platform.LocalContext.current
+        var econ by remember { mutableStateOf(com.rwai.agent.core.AgentPrefs.economy(econCtx)) }
         SwitchRow("Режим рассуждения (thinking)", "Для сложных задач: точнее планирует, но каждый шаг медленнее и расходует больше токенов. При автовыборе простые задачи идут без него.", settings.thinking) { v ->
             Graph.settings.update { it.copy(thinking = v) }
+        }
+        SwitchRow("Экономить рассуждение", "Рассуждение включено на первых трёх шагах задачи и после любой ошибки; дальше механические шаги (нажать, прокрутить) идут без него. Заметно меньше токенов, а на сложных местах точность та же.", econ) { v ->
+            com.rwai.agent.core.AgentPrefs.setEconomy(econCtx, v); econ = v
         }
     }
 

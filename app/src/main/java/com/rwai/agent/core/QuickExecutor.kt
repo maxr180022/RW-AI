@@ -1,5 +1,6 @@
 package com.rwai.agent.core
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Context
@@ -9,7 +10,15 @@ import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.provider.AlarmClock
+import android.provider.ContactsContract
+import androidx.core.content.ContextCompat
+import com.rwai.agent.logic.ContactMatch
+import com.rwai.agent.logic.ContactRef
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.provider.Settings
 import com.rwai.agent.Graph
 import com.rwai.agent.executor.AndroidToolExecutor
@@ -49,6 +58,7 @@ object QuickExecutor {
                 is QuickAction.PlayMusic -> viaTool(ctx, ToolCall("play_music", mapOf("query" to a.query)))
                 is QuickAction.Weather -> viaTool(ctx, ToolCall("weather", if (a.city != null) mapOf("city" to a.city) else emptyMap()))
                 QuickAction.CalendarToday -> viaTool(ctx, ToolCall("calendar_events", mapOf("days" to 1L)))
+                is QuickAction.Call -> call(ctx, a.name)
             }
         } catch (e: SecurityException) {
             QuickResult(false, "Системе не хватило разрешения для действия «" + QuickActions.label(a) + "»: " + (e.message ?: "").take(100))
@@ -105,6 +115,39 @@ object QuickExecutor {
         val dir = if (a.steps > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
         repeat(Math.abs(a.steps)) { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, AudioManager.FLAG_SHOW_UI) }
         return QuickResult(true, "Громкость музыки: " + am.getStreamVolume(AudioManager.STREAM_MUSIC) + " из $max.")
+    }
+
+    // ---------------------------------------------------------------- звонок по имени
+
+    private suspend fun call(ctx: Context, name: String): QuickResult {
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED
+        ) return QuickResult(false, "Нужны разрешения «Контакты» и «Звонки»: Ещё → Настройки → Параметры → Быстрые действия → «Дать доступ к контактам и звонкам».")
+        val contacts = withContext(Dispatchers.IO) { loadContacts(ctx) }
+        val found = ContactMatch.find(name, contacts)
+        if (found.isEmpty()) return QuickResult(false, "Не нашёл в контактах «$name».")
+        val names = found.map { it.name }.distinct()
+        if (names.size > 1) return QuickResult(false, "Нашёл несколько контактов: " + names.take(5).joinToString(", ") + ". Назовите точнее.")
+        val c = found.first()
+        ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(c.number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        return QuickResult(true, "Звоню: " + c.name + ".")
+    }
+
+    /** Контакты с номерами; мобильные номера первыми, чтобы звонок шёл на мобильный. */
+    private fun loadContacts(ctx: Context): List<ContactRef> {
+        val out = ArrayList<Pair<Int, ContactRef>>()
+        ctx.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.TYPE),
+            null, null, null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val n = c.getString(0) ?: continue
+                val num = c.getString(1) ?: continue
+                out += (if (c.getInt(2) == ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE) 0 else 1) to ContactRef(n, num)
+            }
+        }
+        return out.sortedBy { it.first }.map { it.second }
     }
 
     // ---------------------------------------------------------------- время, яркость, режим звука

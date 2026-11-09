@@ -52,26 +52,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
-/** Вкладка «Ещё»: два раздела — «Доступ» (разрешения) и «Параметры». */
+/** «Ещё → Настройки»: один список разделов (доступ, параметры, профиль, подключения). [section] выбирает, какой раздел открыть сразу (0 доступ, 2 профиль, 3 подключения, иначе список). */
 @Composable
 fun SettingsHost(resumeTick: Int, section: Int, onSection: (Int) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(selected = section == 0, onClick = { onSection(0) }, label = { Text("Доступ") })
-            FilterChip(selected = section == 1, onClick = { onSection(1) }, label = { Text("Параметры") })
-            FilterChip(selected = section == 2, onClick = { onSection(2) }, label = { Text("Профиль") })
-            FilterChip(selected = section == 3, onClick = { onSection(3) }, label = { Text("Подключения") })
-        }
-        when (section) {
-            0 -> PermissionsScreen(resumeTick)
-            1 -> SettingsScreen()
-            2 -> ProfileScreen()
-            else -> ConnectionsScreen(resumeTick)
-        }
-    }
+    SettingsScreen(resumeTick, section)
 }
 
 @Composable
