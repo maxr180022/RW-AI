@@ -50,8 +50,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p app/libs
-          curl -fsSL -o app/libs/sherpa-onnx-2.0.1.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-2.0.1.aar
-          echo "a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7  app/libs/sherpa-onnx-2.0.1.aar" | sha256sum -c -
+          curl -fsSL -o app/libs/sherpa-onnx-1.12.40.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-1.12.40.aar
+          echo "a7699d6a2e638a38791b2459cb0099c7577e6e5fca6b8ae916742c872a618b82  app/libs/sherpa-onnx-1.12.40.aar" | sha256sum -c -
 
       - name: Unit tests (compiles all Kotlin code too)
         shell: bash

@@ -125,12 +125,17 @@ object PiperTts {
         var peak = 0f
         var route = ""
         val queue = Channel<FloatArray>(2)
+        var failure: Throwable? = null
         val producer = scope.launch {
             try {
                 for (c in chunks) {
                     if (!isActive) break
                     queue.send(tts.generate(c, 0, speed).samples)
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                failure = t // ошибку забирает основной поток и показывает в настройках
             } finally {
                 queue.close()
             }
@@ -140,12 +145,18 @@ object PiperTts {
             at.play()
             onState(true)
             var first = true
+            var checked = false
             for (samples in queue) {
                 if (first) {
                     first = false
                     _info.value = "играет «" + v.title + "»: голос загружен и первая фраза готова за " + String.format(java.util.Locale.forLanguageTag("ru"), "%.1f", (System.currentTimeMillis() - t0) / 1000.0) + " с"
                 }
                 for (x in samples) { val a = if (x < 0f) -x else x; if (a > peak) peak = a }
+                if (samples.isEmpty()) throw IllegalStateException("Piper вернул пустой звук. Файлы голоса и версия движка не подходят друг другу.")
+                if (!checked) {
+                    checked = true
+                    if (peak < 0.01f) throw IllegalStateException("Piper выдал тишину (пик сигнала " + String.format(java.util.Locale.forLanguageTag("ru"), "%.2f", peak) + "). Файлы голоса и версия движка не подходят друг другу.")
+                }
                 var off = 0
                 while (off < samples.size && currentCoroutineContext().isActive) {
                     val n = at.write(samples, off, samples.size - off, AudioTrack.WRITE_BLOCKING)
@@ -155,6 +166,7 @@ object PiperTts {
                 frames += samples.size
                 if (route.isEmpty()) route = try { at.routedDevice?.productName?.toString() ?: "?" } catch (_: Throwable) { "?" }
             }
+            failure?.let { throw it }
             at.stop()
             while (currentCoroutineContext().isActive && at.playbackHeadPosition < frames) delay(60)
             val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
