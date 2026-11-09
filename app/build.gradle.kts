@@ -24,7 +24,7 @@ android {
         targetSdk = 35
         // Растёт с каждой облачной сборкой, чтобы новая версия всегда считалась обновлением.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.6.8"
+        versionName = "0.7.0"
         // Только реальные телефоны (экономит ~20 МБ: нативная библиотека распознавания речи)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -67,6 +67,7 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += "-Xskip-metadata-version-check" // LiteRT-LM собрана более новым Kotlin, чем читает компилятор
     }
 
     buildFeatures {
@@ -99,6 +100,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    // Локальная модель на телефоне (Gemma 4 E4B, формат .litertlm): работает без интернета и без токенов DeepSeek
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.core)

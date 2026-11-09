@@ -55,6 +55,10 @@
         android:theme="@style/Theme.RWAI"
         tools:targetApi="35">
 
+        <!-- Локальная модель: необязательные системные библиотеки для работы на видеоускорителе (не разрешения) -->
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
         <!-- Панель ассистента поверх экрана: жест вызова ассистента -->
         <activity
             android:name=".assistant.AssistantOverlayActivity"

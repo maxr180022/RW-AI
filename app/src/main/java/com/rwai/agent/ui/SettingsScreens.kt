@@ -353,6 +353,9 @@ fun SettingsScreen() {
 
         ExtrasSettings()
 
+        LocalModelSettings()
+
+
         SectionTitle("Расход токенов")
         var cap by remember(settings.dailyTokenCap) { mutableStateOf(settings.dailyTokenCap.toString()) }
         Text("Сегодня использовано токенов: ${com.rwai.agent.logic.UsageView.group(tokensToday)}", style = MaterialTheme.typography.bodyMedium)
