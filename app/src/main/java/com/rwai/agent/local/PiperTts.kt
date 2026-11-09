@@ -3,6 +3,7 @@ package com.rwai.agent.local
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -120,6 +121,9 @@ object PiperTts {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         track = at
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        var peak = 0f
+        var route = ""
         val queue = Channel<FloatArray>(2)
         val producer = scope.launch {
             try {
@@ -141,6 +145,7 @@ object PiperTts {
                     first = false
                     _info.value = "играет «" + v.title + "»: голос загружен и первая фраза готова за " + String.format(java.util.Locale.forLanguageTag("ru"), "%.1f", (System.currentTimeMillis() - t0) / 1000.0) + " с"
                 }
+                for (x in samples) { val a = if (x < 0f) -x else x; if (a > peak) peak = a }
                 var off = 0
                 while (off < samples.size && currentCoroutineContext().isActive) {
                     val n = at.write(samples, off, samples.size - off, AudioTrack.WRITE_BLOCKING)
@@ -148,10 +153,16 @@ object PiperTts {
                     off += n
                 }
                 frames += samples.size
+                if (route.isEmpty()) route = try { at.routedDevice?.productName?.toString() ?: "?" } catch (_: Throwable) { "?" }
             }
             at.stop()
             while (currentCoroutineContext().isActive && at.playbackHeadPosition < frames) delay(60)
-            _info.value = "работает: «" + v.title + "» озвучил текст до конца"
+            val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            _info.value = "Piper озвучил «" + v.title + "» до конца. Пик сигнала " + String.format(java.util.Locale.forLanguageTag("ru"), "%.2f", peak) +
+                (if (peak < 0.02f) " (почти тишина: голос выдал пустой звук)" else "") +
+                ". Громкость мультимедиа " + vol + " из " + max + (if (vol == 0) " (НА НУЛЕ, поэтому не слышно)" else "") +
+                ". Звук идёт на: «" + route + "»"
         } finally {
             producer.cancel()
             try { at.release() } catch (_: Throwable) { }

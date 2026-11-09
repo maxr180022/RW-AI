@@ -594,6 +594,11 @@ private fun ChatBubble(entry: ChatEntry) {
     val scheme = MaterialTheme.colorScheme
     val ctx = LocalContext.current
     val isUser = entry.role == ChatRole.USER
+    val shown = remember(entry.text) {
+        try {
+            if (com.rwai.agent.logic.ProfileTemplates.hasPlaceholders(entry.text)) com.rwai.agent.logic.ProfileTemplates.expand(entry.text, Graph.profile.values()).text else entry.text
+        } catch (_: Exception) { entry.text }
+    }
     val label = when (entry.role) {
         ChatRole.USER -> null
         ChatRole.AGENT -> "Руся AI"
@@ -634,9 +639,9 @@ private fun ChatBubble(entry: ChatEntry) {
                     }
                 }
             }
-            MdText(entry.text, color = fg, style = MaterialTheme.typography.bodyMedium)
+            MdText(shown, color = fg, style = MaterialTheme.typography.bodyMedium)
             entry.files.forEach { f -> FileCard(f, ctx) }
-            SpeakButton(entry.text, fg)
+            SpeakButton(shown, fg)
         }
     }
 }

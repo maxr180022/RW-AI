@@ -56,6 +56,7 @@ private enum class Page(val title: String) {
     AI("DeepSeek и модель"),
     AGENT("Поведение агента"),
     VOICE("Язык и голос"),
+    CAR("Звук в машине (Bluetooth)"),
     PRIVACY("Сообщения и приватность"),
     WEB("Интернет и компьютер"),
     LOCAL("Локальная модель"),
@@ -89,6 +90,7 @@ fun SettingsScreen() {
                 Page.AGENT -> AgentPage()
                 Page.VOICE -> VoicePage()
                 Page.PRIVACY -> PrivacyPage()
+                Page.CAR -> CarAudioSettings()
                 Page.WEB -> WebPage()
                 Page.LOCAL -> SettingsGroup("Модель на телефоне") { LocalModelSettings() }
                 Page.TOKENS -> TokensPage()
@@ -101,7 +103,7 @@ fun SettingsScreen() {
 
 /** Карточка-группа внутри страницы раздела: заголовок и настройки одной темы. */
 @Composable
-private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     GlassCard {
         Text(title, style = MaterialTheme.typography.titleSmall)
         content()
@@ -135,6 +137,7 @@ private fun SettingsHub(onOpen: (Page) -> Unit) {
         Page.AI -> (if (hasKey) "Ключ сохранён" else "Ключ не задан") + " · " + settings.model + if (settings.autoModel) " · автовыбор модели" else ""
         Page.AGENT -> settings.mode.title + " · после задачи: " + afterTaskLabel(settings.afterTask)
         Page.VOICE -> languageLabel(settings.language) + " · озвучка итога: " + onOff(settings.speakResults)
+        Page.CAR -> if (com.rwai.agent.audio.CallRouter.enabled(ctx)) "Включено: звонки не на машину" else "Выключено"
         Page.PRIVACY -> "Уведомления: " + onOff(settings.captureNotifications) + " · сводка: " + onOff(settings.digestEnabled) + " · автоперевод: " + onOff(settings.autoTranslate)
         Page.WEB -> "Поиск: " + (if (Graph.secretStore.has("brave_search_key")) "Brave" else "DuckDuckGo") + " · мост к компьютеру: " + (if (settings.bridgeUrl.isNotBlank()) "задан" else "не задан")
         Page.LOCAL -> when (local.state) {

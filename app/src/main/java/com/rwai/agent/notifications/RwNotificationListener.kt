@@ -55,6 +55,7 @@ class RwNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         registerScreenReceiver()
+        try { com.rwai.agent.audio.CallRouter.start(applicationContext) } catch (_: Throwable) { }
         scope.launch {
             val days = Graph.settings.current.retentionDays
             if (days > 0) Graph.db.purgeOlderThan(System.currentTimeMillis() - days * 86_400_000L)

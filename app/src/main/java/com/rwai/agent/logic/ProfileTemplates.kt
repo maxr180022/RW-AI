@@ -26,12 +26,18 @@ object ProfileTemplates {
     }
 
     /** Заменяет значения профиля (от 4 символов) на плейсхолдеры — перед тем, как текст уходит модели или в журнал. */
+    /** Имена создателей приложения: это не личные данные владельца, модель видит их как есть (иначе в памяти диалога появляются заглушки вместо имени). */
+    private val publicNames = Regex("Maxim Ricco|Максим Рикко|Максим Рико|RusWeo|РусВео", RegexOption.IGNORE_CASE)
+    private val holdToken = Regex("\uE000(\\d+)\uE001")
+
     fun redact(text: String, values: Map<String, String>): String {
-        var s = text
+        val hold = ArrayList<String>()
+        var s = publicNames.replace(text) { m -> hold.add(m.value); "\uE000" + (hold.size - 1) + "\uE001" }
         values.entries.filter { it.value.length >= 4 }.sortedByDescending { it.value.length }.forEach { (k, v) ->
             s = s.replace(v, "{{profile.$k}}")
         }
-        return s
+        if (hold.isEmpty()) return s
+        return holdToken.replace(s) { m -> hold[m.groupValues[1].toInt()] }
     }
 
     fun isValidKey(key: String): Boolean = keyRegex.matches(key)
