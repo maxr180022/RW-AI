@@ -21,6 +21,9 @@ object PiperCatalog {
 
     val ALL = listOf(
         PiperVoice("ru_dmitri", "ru", "Дмитрий (мужской)", "vits-piper-ru_RU-dmitri-medium.tar.bz2", 67_188_551L, "c86d0803737de13d441923ff3b3f309482fab8d7af3ec85949942809eb9a3660", "CC0"),
+        PiperVoice("en_joe", "en", "Joe (мужской)", "vits-piper-en_US-joe-medium.tar.bz2", 67_169_394L, "261b903a1fb2ce621e2b5b14233cd41223c3b9f9590f896c11daee4df22d9bd3", "CC0"),
+        PiperVoice("en_john", "en", "John (мужской)", "vits-piper-en_US-john-medium.tar.bz2", 67_249_181L, "d90362cfa48e429d3096f644785184446145b6e38216f2eaf4c0601b8aad5a36", "общественное достояние"),
+        PiperVoice("en_norman", "en", "Norman (мужской)", "vits-piper-en_US-norman-medium.tar.bz2", 67_203_672L, "1f32065d480abe9abc7c7f91442125d0b34c1cc065d1e600466cac408eabf3b8", "общественное достояние"),
         PiperVoice("en_ljspeech", "en", "LJ Speech (женский)", "vits-piper-en_US-ljspeech-medium.tar.bz2", 67_169_893L, "3dfb4b759d8be032a4903a9538d128b0fda2a06ab1de6cbc2d93a97e2dd83dba", "общественное достояние"),
         PiperVoice("es_ald", "es", "Ald, Мексика", "vits-piper-es_MX-ald-medium.tar.bz2", 67_196_497L, "c60cf7bc853eb01a875fba0756523fecf9d9f46c763b19785d223fc981fb4fb6", "Unlicense"),
         PiperVoice("es_davefx", "es", "DaveFX, Испания", "vits-piper-es_ES-davefx-medium.tar.bz2", 67_184_952L, "a3f6beb54a9cb893279f72978a22f807a4d9fc9c7848157b524d5cc7b7f58b22", "CC0"),

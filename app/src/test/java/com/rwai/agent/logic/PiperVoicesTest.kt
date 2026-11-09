@@ -32,6 +32,11 @@ class PiperVoicesTest {
         assertNotNull(PiperCatalog.byId(PiperCatalog.PERMANENT_ID))
     }
 
+    @Test fun englishHasSeveralMaleVoicesAndJoeIsTheDefault() {
+        assertEquals("en_joe", PiperCatalog.defaultFor("en-US")?.id)
+        assertTrue(PiperCatalog.forLanguage("en").size >= 3)
+    }
+
     @Test fun languageTagsMapToVoiceLanguages() {
         assertEquals("ru", PiperCatalog.langOf("ru-RU"))
         assertEquals("es", PiperCatalog.langOf("es-UY"))
