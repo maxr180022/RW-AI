@@ -2,7 +2,6 @@ package com.rwai.agent.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,13 +23,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.rwai.agent.Graph
 
-/** Сводка сообщений, автоперевод, ключ поиска Brave и мост к Claude Code. */
+/** Голос агента. Показывается внутри карточки раздела «Язык и голос». */
 @Composable
-fun ExtrasSettings() {
+fun ExtrasVoice() {
     val settings by Graph.settings.state.collectAsState()
-    val secrets = Graph.secretStore
-
-    SectionTitle("Голос агента")
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var voices by remember { mutableStateOf(Graph.speaker.voices(settings.language)) }
     Text(
@@ -57,8 +53,12 @@ fun ExtrasSettings() {
             }, label = { Text(v.label) })
         }
     }
+}
 
-    SectionTitle("Сводка и перевод сообщений")
+/** Сводка «кому ответить» и автоперевод. Показывается внутри карточек раздела «Сообщения и приватность». */
+@Composable
+fun ExtrasDigest() {
+    val settings by Graph.settings.state.collectAsState()
     SwitchRow(
         "Сводка «кому ответить»",
         "После долгого простоя экрана и разблокировки покажет, кто ждёт ответа. Реклама, рассылки и шумные группы отфильтровываются. Нужен доступ к уведомлениям.",
@@ -72,6 +72,11 @@ fun ExtrasSettings() {
             }
         }
     }
+}
+
+@Composable
+fun ExtrasTranslate() {
+    val settings by Graph.settings.state.collectAsState()
     SwitchRow(
         "Автоперевод сообщений",
         "Сообщения на испанском и английском переводятся на язык приложения и показываются во «Входящих». Для перевода текст отправляется в DeepSeek.",
@@ -81,8 +86,12 @@ fun ExtrasSettings() {
         "Голосовые сообщения в уведомлении приходят без текста, поэтому Руся AI их не расшифровывает. В WhatsApp включите «Расшифровка голосовых сообщений» (Настройки → Чаты) — тогда текст появится сам.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
 
-    SectionTitle("Поиск в интернете")
+/** Ключ Brave Search. */
+@Composable
+fun ExtrasSearch() {
+    val secrets = Graph.secretStore
     var hasBrave by remember { mutableStateOf(secrets.has("brave_search_key")) }
     var braveInput by remember { mutableStateOf("") }
     Text(
@@ -97,8 +106,13 @@ fun ExtrasSettings() {
         Button(enabled = braveInput.trim().length >= 10, onClick = { secrets.put("brave_search_key", braveInput.trim()); braveInput = ""; hasBrave = true }) { Text("Сохранить") }
         OutlinedButton(enabled = hasBrave, onClick = { secrets.remove("brave_search_key"); hasBrave = false }) { Text("Удалить") }
     }
+}
 
-    SectionTitle("Мост к Claude Code (компьютер)")
+/** Мост к Claude Code на компьютере. */
+@Composable
+fun ExtrasBridge() {
+    val settings by Graph.settings.state.collectAsState()
+    val secrets = Graph.secretStore
     var hasToken by remember { mutableStateOf(secrets.has("bridge_token")) }
     var tokenInput by remember { mutableStateOf("") }
     var urlInput by remember(settings.bridgeUrl) { mutableStateOf(settings.bridgeUrl) }

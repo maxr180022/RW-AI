@@ -51,7 +51,6 @@ fun LocalModelSettings() {
 
     LaunchedEffect(Unit) { LocalModelStore.refresh(ctx) }
 
-    SectionTitle("Локальная модель (без токенов)")
     Text(LocalModelSpec.TITLE, style = MaterialTheme.typography.titleSmall)
     Text(LocalModelText.hint(st.state.name, st.done, st.total), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (st.state == LocalModelStore.State.DOWNLOADING || st.state == LocalModelStore.State.VERIFYING) {
