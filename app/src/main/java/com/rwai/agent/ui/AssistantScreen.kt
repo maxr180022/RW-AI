@@ -636,6 +636,7 @@ private fun ChatBubble(entry: ChatEntry) {
             }
             MdText(entry.text, color = fg, style = MaterialTheme.typography.bodyMedium)
             entry.files.forEach { f -> FileCard(f, ctx) }
+            SpeakButton(entry.text, fg)
         }
     }
 }
@@ -662,5 +663,34 @@ private fun FileCard(f: com.rwai.agent.docs.GeneratedFile, ctx: android.content.
                 Text("Скачать", style = MaterialTheme.typography.labelMedium)
             }
         }
+    }
+}
+
+/** Маленький динамик в углу каждого сообщения: озвучить его (даже если оно набрано текстом); повторное нажатие останавливает. */
+@Composable
+private fun SpeakButton(text: String, tint: Color) {
+    val speaking by Graph.speaker.speaking.collectAsState()
+    var mine by remember { mutableStateOf(false) }
+    LaunchedEffect(speaking) { if (!speaking) mine = false }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.rwai.agent.R.drawable.ic_volume_up),
+            contentDescription = if (mine) "Остановить озвучку" else "Озвучить",
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (mine) Color.White else tint.copy(alpha = 0.6f)),
+            modifier = Modifier.size(22.dp).clickable {
+                if (mine) {
+                    Graph.speaker.stop()
+                    mine = false
+                } else {
+                    val tag = when (com.rwai.agent.logic.LangDetect.detect(text)) {
+                        com.rwai.agent.logic.Lang.RU -> "ru-RU"
+                        com.rwai.agent.logic.Lang.ES -> "es-ES"
+                        com.rwai.agent.logic.Lang.EN -> "en-US"
+                        else -> Graph.settings.current.language
+                    }
+                    mine = Graph.speaker.speak(com.rwai.agent.logic.Speakable.clean(text, 3000, tag.startsWith("ru")), tag)
+                }
+            },
+        )
     }
 }

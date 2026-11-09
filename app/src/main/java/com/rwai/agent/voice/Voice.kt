@@ -152,8 +152,13 @@ class Speaker(context: Context) {
         // Piper (без интернета, естественный голос) первым; не включён, голос не скачан или не вышло — системный голос.
         if (com.rwai.agent.local.PiperTts.canSpeak(appCtx, languageTag)) {
             tts?.stop()
-            if (com.rwai.agent.local.PiperTts.speak(appCtx, text.take(3000), languageTag, 1.0f) { on -> _speaking.value = on }) return true
+            val started = com.rwai.agent.local.PiperTts.speak(appCtx, text.take(3000), languageTag, 1.0f, onState = { on -> _speaking.value = on }, onError = { speakSystem(text, languageTag) })
+            if (started) return true
         }
+        return speakSystem(text, languageTag)
+    }
+
+    private fun speakSystem(text: String, languageTag: String): Boolean {
         val t = tts ?: return false
         if (!ready) return false
         val locale = Locale.forLanguageTag(languageTag)

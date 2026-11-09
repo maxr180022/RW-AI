@@ -18,6 +18,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
@@ -34,6 +36,11 @@ object PiperTts {
     private var engineId: String? = null
     private val lock = Any()
 
+    private val _info = MutableStateFlow("")
+
+    /** Что сейчас происходит с озвучкой Piper: «играет», «ошибка …». Показывается в настройках после «Проверить». */
+    val info: StateFlow<String> get() = _info
+
     /** Можно ли озвучить этим движком: включено, и голос выбранного языка скачан. */
     fun canSpeak(ctx: Context, lang: String): Boolean {
         if (!PiperStore.enabled(ctx)) return false
@@ -42,18 +49,22 @@ object PiperTts {
     }
 
     /** Запускает озвучку и сразу возвращается. [onState] получает true, когда зазвучало, и false, когда закончилось или остановлено. */
-    fun speak(ctx: Context, text: String, lang: String, speed: Float = 1.0f, onState: (Boolean) -> Unit = {}): Boolean {
+    fun speak(ctx: Context, text: String, lang: String, speed: Float = 1.0f, onState: (Boolean) -> Unit = {}, onError: (String) -> Unit = {}): Boolean {
         val v = PiperStore.chosen(ctx, lang) ?: return false
         if (!PiperStore.isInstalled(ctx, v)) return false
         stop()
         val app = ctx.applicationContext
+        _info.value = "готовлю голос «" + v.title + "»…"
         job = scope.launch {
             try {
                 play(app, v, text, speed, onState)
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Throwable) {
-                // не получилось: тишина лучше падения; следующая фраза попробует снова
+            } catch (t: Throwable) {
+                // Не получилось: причина видна в настройках, а озвучку подхватывает системный голос (onError).
+                val m = (t.message ?: t.javaClass.simpleName)
+                _info.value = "ошибка: " + t.javaClass.simpleName + ": " + m.take(300)
+                onError(m)
             } finally {
                 onState(false)
             }
@@ -96,6 +107,7 @@ object PiperTts {
     private suspend fun play(ctx: Context, v: PiperVoice, text: String, speed: Float, onState: (Boolean) -> Unit) {
         val chunks = SpeechChunks.split(text)
         if (chunks.isEmpty()) return
+        val t0 = System.currentTimeMillis()
         val tts = engineFor(ctx, v)
         val rate = tts.sampleRate()
         val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
@@ -123,7 +135,12 @@ object PiperTts {
         try {
             at.play()
             onState(true)
+            var first = true
             for (samples in queue) {
+                if (first) {
+                    first = false
+                    _info.value = "играет «" + v.title + "»: голос загружен и первая фраза готова за " + String.format(java.util.Locale.forLanguageTag("ru"), "%.1f", (System.currentTimeMillis() - t0) / 1000.0) + " с"
+                }
                 var off = 0
                 while (off < samples.size && currentCoroutineContext().isActive) {
                     val n = at.write(samples, off, samples.size - off, AudioTrack.WRITE_BLOCKING)
@@ -134,6 +151,7 @@ object PiperTts {
             }
             at.stop()
             while (currentCoroutineContext().isActive && at.playbackHeadPosition < frames) delay(60)
+            _info.value = "работает: «" + v.title + "» озвучил текст до конца"
         } finally {
             producer.cancel()
             try { at.release() } catch (_: Throwable) { }

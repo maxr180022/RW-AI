@@ -9,7 +9,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +40,7 @@ private fun sample(lang: String): String = when (lang) {
 fun PiperSettings() {
     val ctx = LocalContext.current
     val status by PiperStore.status.collectAsState()
+    val info by PiperTts.info.collectAsState()
     var enabled by remember { mutableStateOf(PiperStore.enabled(ctx)) }
     var tick by remember { mutableIntStateOf(0) } // перерисовка после выбора голоса
     var note by remember { mutableStateOf<String?>(null) }
@@ -51,6 +51,11 @@ fun PiperSettings() {
         "Естественные голоса прямо на телефоне вместо системного голоса Google. Голос каждого языка скачивается один раз, около 64 МБ. Пока голос не скачан или что-то не вышло, говорит системный голос.",
         enabled,
     ) { v -> PiperStore.setEnabled(ctx, v); enabled = v }
+    if (info.isNotBlank()) {
+        Text("Состояние Piper: $info", style = MaterialTheme.typography.bodyMedium)
+    } else {
+        Text("Нажмите «Проверить» у скачанного голоса: здесь появится, заработал ли Piper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
 
     PiperCatalog.LANGUAGES.forEach { (lang, name) ->
@@ -66,21 +71,23 @@ fun PiperSettings() {
                     st?.state == PiperStore.State.DOWNLOADING -> {
                         LinearProgressIndicator(progress = { DownloadMath.percent(st.done, st.total) / 100f }, modifier = Modifier.fillMaxWidth())
                         Text("Скачивание: ${DownloadMath.percent(st.done, st.total)} %. Держите приложение открытым.", style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = { PiperStore.stop(ctx, v) }) { Text("Остановить") }
+                        ActionPill("Остановить") { PiperStore.stop(ctx, v) }
                     }
                     st?.state == PiperStore.State.VERIFYING -> Text("Проверяю файл…", style = MaterialTheme.typography.bodySmall)
                     st?.state == PiperStore.State.EXTRACTING -> Text("Распаковываю…", style = MaterialTheme.typography.bodySmall)
                     installed -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (!picked) Button(onClick = { PiperStore.choose(ctx, v); tick++ }) { Text("Выбрать") }
-                        OutlinedButton(onClick = {
+                        if (!picked) ActionPill("Выбрать", accent = true) { PiperStore.choose(ctx, v); tick++ }
+                        ActionPill("Проверить") {
                             PiperStore.choose(ctx, v); tick++
-                            if (!PiperTts.speak(ctx, sample(lang), lang)) note = "Не удалось озвучить."
-                        }) { Text("Проверить") }
-                        OutlinedButton(onClick = { PiperTts.stop(); PiperStore.delete(ctx, v); tick++ }) { Text("Удалить") }
+                            note = null
+                            // Проверка идёт самим Piper, без запасного голоса: так видно, работает он или нет.
+                            if (!PiperTts.speak(ctx, sample(lang), lang)) note = "Не удалось начать озвучку."
+                        }
+                        ActionPill("Удалить") { PiperTts.stop(); PiperStore.delete(ctx, v); tick++ }
                     }
                     else -> {
                         st?.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                        Button(onClick = { note = PiperStore.download(ctx, v) }) { Text("Скачать (${DownloadMath.human(v.size)})") }
+                        ActionPill("Скачать (${DownloadMath.human(v.size)})", accent = true) { note = PiperStore.download(ctx, v) }
                     }
                 }
             }
