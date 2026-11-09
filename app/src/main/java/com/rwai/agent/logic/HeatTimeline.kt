@@ -10,7 +10,7 @@ data class HeatSample(val t: Long, val tempC: Float, val pct: Int, val charging:
 /** Период активности: приложение на экране, служба переднего плана или работа локальной модели Руси. */
 data class ActivityInterval(val label: String, val type: String, val start: Long, val end: Long, val kind: String? = null)
 
-enum class Verdict { LIKELY, UNLIKELY }
+enum class HeatVerdict { LIKELY, UNLIKELY }
 
 /** Подозреваемый в одном нагреве: что работало, сколько в нагреве и сколько без нагрева. */
 data class EpisodeSuspect(
@@ -22,7 +22,7 @@ data class EpisodeSuspect(
     val minCool: Int,
     val firstStart: Long,
     val lastEnd: Long,
-    val verdict: Verdict,
+    val verdict: HeatVerdict,
 )
 
 /** Один нагрев: [riseStart] — когда температура пошла вверх, [runStart]…[runEnd] — когда была выше порога. */
@@ -100,7 +100,7 @@ object HeatTimeline {
                 val m = (inEp / MIN).toInt()
                 if (m < 3) continue
                 val cool = coolMin[key] ?: 0
-                val verdict = if (cool >= 30 && cool >= 3 * m) Verdict.UNLIKELY else Verdict.LIKELY
+                val verdict = if (cool >= 30 && cool >= 3 * m) HeatVerdict.UNLIKELY else HeatVerdict.LIKELY
                 val inside = list.filter { overlap(it.start, it.end, winStart, winEnd) > 0 }
                 suspects += EpisodeSuspect(
                     key.first, key.second, list.firstNotNullOfOrNull { it.kind }, m, cool,
@@ -153,7 +153,7 @@ object HeatTimeline {
             else -> "был на экране"
         }
         val name = s.label + (s.kind?.let { " ($it)" } ?: "")
-        val v = if (s.verdict == Verdict.UNLIKELY) "вряд ли причина: без нагрева это же работало ${minutesText(s.minCool)}"
+        val v = if (s.verdict == HeatVerdict.UNLIKELY) "вряд ли причина: без нагрева это же работало ${minutesText(s.minCool)}"
         else if (s.minCool < s.minInEpisode / 2) "вероятная причина: почти не работало, пока телефон был прохладным"
         else "возможная причина"
         return "$name: $what ${hm(s.firstStart)}–${hm(s.lastEnd)} (${minutesText(s.minInEpisode)}); $v"

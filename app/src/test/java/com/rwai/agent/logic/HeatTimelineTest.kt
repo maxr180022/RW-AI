@@ -43,16 +43,16 @@ class HeatTimelineTest {
         val e = HeatTimeline.episodes(s, ivs).single()
         val game = e.suspects.first { it.label == "Игра" }
         val auto = e.suspects.firstOrNull { it.label == "Android Auto" }
-        assertEquals(Verdict.LIKELY, game.verdict)
+        assertEquals(HeatVerdict.LIKELY, game.verdict)
         assertEquals("Игра", e.suspects.first().label)
-        assertTrue(auto == null || auto.verdict == Verdict.UNLIKELY)
+        assertTrue(auto == null || auto.verdict == HeatVerdict.UNLIKELY)
     }
 
     @Test fun longActivityWithoutHeatMakesSuspectUnlikely() {
         val s = samples(0 to 34f, 480 to 34f, 510 to 40f, 570 to 40f, 640 to 34f)
         // музыка играла и до нагрева (8 ч), и в нагрев
         val e = HeatTimeline.episodes(s, listOf(iv("Музыка", "служба", 0, 570))).single()
-        assertEquals(Verdict.UNLIKELY, e.suspects.single().verdict)
+        assertEquals(HeatVerdict.UNLIKELY, e.suspects.single().verdict)
         assertTrue(HeatTimeline.line(e.suspects.single()).contains("вряд ли"))
     }
 
