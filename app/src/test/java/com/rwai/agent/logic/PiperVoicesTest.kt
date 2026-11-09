@@ -37,12 +37,17 @@ class PiperVoicesTest {
         assertTrue(PiperCatalog.forLanguage("en").size >= 3)
     }
 
+    @Test fun aldIsGone() {
+        assertTrue(PiperCatalog.byId("es_ald") == null)
+        assertEquals(listOf("es_davefx"), PiperCatalog.forLanguage("es").map { it.id })
+    }
+
     @Test fun languageTagsMapToVoiceLanguages() {
         assertEquals("ru", PiperCatalog.langOf("ru-RU"))
         assertEquals("es", PiperCatalog.langOf("es-UY"))
         assertEquals("en", PiperCatalog.langOf("en_US"))
         assertEquals("ru_dmitri", PiperCatalog.defaultFor("ru-RU")?.id)
-        assertEquals("es_ald", PiperCatalog.defaultFor("es-UY")?.id)
+        assertEquals("es_davefx", PiperCatalog.defaultFor("es-UY")?.id)
     }
 
     @Test fun textIsSplitIntoSentencesAndLongOnesAreCut() {

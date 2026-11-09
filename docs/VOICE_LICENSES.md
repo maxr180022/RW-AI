@@ -10,7 +10,6 @@
 | John | en | LibriVox | общественное достояние |
 | Norman | en | LibriVox | общественное достояние |
 | LJ Speech | en | LJ Speech | общественное достояние |
-| Ald | es (Мексика) | Ald Mexican Spanish speech dataset | Unlicense |
 | DaveFX | es (Испания) | OHF-Voice/voice-datasets | CC0 |
 | Thorsten | de | Thorsten-Voice | CC0 |
 
