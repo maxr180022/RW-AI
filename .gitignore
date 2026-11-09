@@ -13,3 +13,5 @@
 keystore.properties
 dist/
 bridge/.rw_bridge_token
+# Библиотека движка озвучки скачивается при сборке (см. build-apk.yml)
+app/libs/

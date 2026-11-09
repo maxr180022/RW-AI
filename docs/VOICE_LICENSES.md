@@ -1,0 +1,19 @@
+# Голоса и движок озвучки: лицензии (проверено 2026-11-08)
+
+Приложение планируется продавать, поэтому в каталог голосов попали только те, чьи наборы данных разрешают коммерческое использование.
+
+| Голос | Язык | Набор данных | Лицензия |
+|---|---|---|---|
+| Dmitri | ru | OHF-Voice/voice-datasets | CC0 |
+| Denis | ru | OHF-Voice/voice-datasets | CC0 |
+| LJ Speech | en | LJ Speech | общественное достояние |
+| Ald | es (Мексика) | Ald Mexican Spanish speech dataset | Unlicense |
+| DaveFX | es (Испания) | OHF-Voice/voice-datasets | CC0 |
+| Thorsten | de | Thorsten-Voice | CC0 |
+
+Исключены намеренно: Ruslan (CC BY-NC-SA, некоммерческая), Ryan (CC BY-NC-SA), hfc_male (CC BY-NC-SA), Lessac (условия Blizzard 2013, не подтверждены для коммерции), Irina (лицензия в карточке «Unknown»), en_GB-alan и Amy (лицензия «See URL», не подтверждена).
+Источник: карточки голосов (MODEL_CARD) в rhasspy/piper-voices. Перед продажей перечитать их заново: данные могут меняться.
+
+## Движок
+- sherpa-onnx 2.0.1: Apache-2.0.
+- Для произношения голоса Piper используют espeak-ng (данные espeak-ng-data внутри пакета голоса). espeak-ng распространяется под GPL-3.0. Для закрытого коммерческого приложения это нужно проверить юристом ДО продажи (и, если понадобится, заменить способ произношения или голоса).

@@ -64,7 +64,7 @@ fun MoreHub(resumeTick: Int, open: (target: Int, section: Int) -> Unit) {
             }
         }
         Text(
-            "Руся AI · версия " + version + "\nСоздатели: Maxim Ricco (Максим Рикко) и RusWeo (РусВео)",
+            "Руся AI · версия " + version + "\nСоздатели: Maxim Ricco и команда RusWeo",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp, start = 4.dp),

@@ -124,6 +124,7 @@ class VoiceInput(private val context: Context) {
 
 /** Озвучивание ответов через системный TextToSpeech. */
 class Speaker(context: Context) {
+    private val appCtx = context.applicationContext
     private var tts: TextToSpeech? = null
     @Volatile private var ready = false
 
@@ -148,6 +149,11 @@ class Speaker(context: Context) {
     }
 
     fun speak(text: String, languageTag: String): Boolean {
+        // Piper (без интернета, естественный голос) первым; не включён, голос не скачан или не вышло — системный голос.
+        if (com.rwai.agent.local.PiperTts.canSpeak(appCtx, languageTag)) {
+            tts?.stop()
+            if (com.rwai.agent.local.PiperTts.speak(appCtx, text.take(3000), languageTag, 1.0f) { on -> _speaking.value = on }) return true
+        }
         val t = tts ?: return false
         if (!ready) return false
         val locale = Locale.forLanguageTag(languageTag)
@@ -201,7 +207,7 @@ class Speaker(context: Context) {
         } catch (_: Exception) { }
     }
 
-    fun stop() { tts?.stop() }
+    fun stop() { tts?.stop(); com.rwai.agent.local.PiperTts.stop() }
 
     fun shutdown() {
         tts?.stop(); tts?.shutdown(); tts = null; ready = false

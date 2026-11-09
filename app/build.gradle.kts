@@ -24,7 +24,7 @@ android {
         targetSdk = 35
         // Растёт с каждой облачной сборкой, чтобы новая версия всегда считалась обновлением.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.8.1"
+        versionName = "0.9.0"
         // Только реальные телефоны (экономит ~20 МБ: нативная библиотека распознавания речи)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -103,6 +103,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    // Озвучка Piper без интернета: движок sherpa-onnx (AAR скачивается в CI с проверкой контрольной суммы) и распаковка пакетов голосов
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
+    implementation("org.apache.commons:commons-compress:1.27.1")
     // Локальная модель на телефоне (Gemma 4 E4B, формат .litertlm): работает без интернета и без токенов DeepSeek
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
 

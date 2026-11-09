@@ -358,7 +358,8 @@ private fun VoicePage() {
             Graph.settings.update { it.copy(voiceAutoRun = v) }
         }
     }
-    SettingsGroup("Голос агента") { ExtrasVoice() }
+    SettingsGroup("Голос Piper (офлайн, естественный)") { PiperSettings() }
+    SettingsGroup("Системный голос (запасной)") { ExtrasVoice() }
 }
 
 // ------------------------------------------------------------------ Сообщения и приватность
