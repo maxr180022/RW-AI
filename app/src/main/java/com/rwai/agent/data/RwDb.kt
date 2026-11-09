@@ -15,19 +15,26 @@ data class NotificationRow(
     val group: Boolean = false, val tr: String? = null,
 )
 
+data class RouteLogRow(val id: Long, val ts: Long, val source: String, val command: String, val action: String, val ok: Boolean, val message: String, val audit: String?)
+
 data class MemoryRow(val id: Long, val ts: Long, val source: String, val app: String?, val contact: String?, val title: String, val body: String)
 
 /**
  * Локальная база: журнал действий, уведомления и память с полнотекстовым поиском (FTS4, unicode61 —
  * корректно сравнивает регистр кириллицы). Всё хранится только на устройстве; резервное копирование выключено.
  */
-class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 4) {
+class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwai.db", null, 5) {
 
     /** Диалоги и проекты (v3). Живут в той же базе, чистятся вместе с остальными данными. */
     val dialogStore: DialogStore by lazy { DialogStore(this) }
 
     /** Меняется, когда пришли новые уведомления: строка «Не отвечено» на главном экране пересчитывается сама. */
     val changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+    /** Журнал решений быстрых действий (v5): что за команда, кто разобрал (правило или локальная модель), что сделано. Нужен для проверки качества и обучения. */
+    private fun createRouteLog(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS route_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, command TEXT NOT NULL, action TEXT NOT NULL, ok INTEGER NOT NULL, message TEXT NOT NULL, audit TEXT)")
+    }
 
     private fun createDialogTables(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, memory TEXT NOT NULL DEFAULT '')")
@@ -44,6 +51,7 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
         db.execSQL("CREATE TABLE memory(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, app TEXT, contact TEXT, title TEXT NOT NULL, body TEXT NOT NULL)")
         db.execSQL("CREATE VIRTUAL TABLE memory_fts USING fts4(title, body, tokenize=unicode61)")
         createDialogTables(db)
+        createRouteLog(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -54,6 +62,34 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
         }
         if (oldVersion < 3) createDialogTables(db)   // v3: диалоги и проекты (сразу с общей памятью проекта); старые данные не затрагиваются
         else if (oldVersion == 3) db.execSQL("ALTER TABLE projects ADD COLUMN memory TEXT NOT NULL DEFAULT ''")   // v4: общая память проекта
+        if (oldVersion < 5) createRouteLog(db)   // v5: журнал решений быстрых действий
+    }
+
+    // ---------------- Журнал решений быстрых действий ----------------
+
+    fun addRouteLog(source: String, command: String, action: String, ok: Boolean, message: String) {
+        val v = ContentValues().apply {
+            put("ts", System.currentTimeMillis()); put("source", source.take(20)); put("command", command.take(400))
+            put("action", action.take(200)); put("ok", if (ok) 1 else 0); put("message", message.take(500))
+        }
+        writableDatabase.insert("route_log", null, v)
+    }
+
+    fun recentRouteLog(limit: Int = 20): List<RouteLogRow> {
+        val out = ArrayList<RouteLogRow>()
+        readableDatabase.rawQuery("SELECT id, ts, source, command, action, ok, message, audit FROM route_log ORDER BY id DESC LIMIT ?", arrayOf(limit.toString())).use { c ->
+            while (c.moveToNext()) out += RouteLogRow(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5) == 1, c.getString(6), c.getString(7))
+        }
+        return out
+    }
+
+    /** (выполнено быстро, не вышло или отдано агенту) */
+    fun routeCounts(): Pair<Int, Int> {
+        var ok = 0; var bad = 0
+        readableDatabase.rawQuery("SELECT ok, COUNT(*) FROM route_log GROUP BY ok", null).use { c ->
+            while (c.moveToNext()) if (c.getInt(0) == 1) ok = c.getInt(1) else bad = c.getInt(1)
+        }
+        return ok to bad
     }
 
     // ---------------- Журнал действий ----------------
@@ -219,10 +255,11 @@ class RwDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "rwa
             db.delete("notifications", "ts < ?", arrayOf(cutoffTs.toString()))
             deleteMemoryWhere(db, "ts < ?", arrayOf(cutoffTs.toString()))
             db.delete("activity", "ts < ?", arrayOf(cutoffTs.toString()))
+            db.delete("route_log", "ts < ?", arrayOf(cutoffTs.toString()))
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         dialogStore.purgeOlderThan(cutoffTs)
     }
 
-    fun wipeAll() { clearActivity(); clearNotifications(); clearMemory(); dialogStore.wipe() }
+    fun wipeAll() { clearActivity(); clearNotifications(); clearMemory(); dialogStore.wipe(); writableDatabase.delete("route_log", null, null) }
 }

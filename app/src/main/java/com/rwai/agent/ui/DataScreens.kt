@@ -24,6 +24,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +64,7 @@ fun InboxScreen(resumeTick: Int) {
     var summary by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val enabled = remember(resumeTick) { isNotificationAccessEnabled(ctx) }
+    val skipTick by com.rwai.agent.digest.SkippedStore.tick.collectAsState()
     LaunchedEffect(resumeTick) { com.rwai.agent.digest.RepliedStore.markSeen() } // «новое» на главном экране считается от этого момента
 
     LaunchedEffect(refresh, resumeTick) {
@@ -110,7 +113,13 @@ fun InboxScreen(resumeTick: Int) {
                 )
             }
         }
-        items(rows) { r -> NotificationItem(r) }
+        val visible = rows.filter { skipTick >= 0 && !AnsweredCards.has(com.rwai.agent.digest.SkippedStore.raw(), "n" + it.id) }
+        items(visible, key = { it.id }) { r ->
+            NotificationItem(r) {
+                com.rwai.agent.digest.SkippedStore.skip("n" + r.id)
+                (r.sender ?: r.title)?.takeIf { it.isNotBlank() }?.let { com.rwai.agent.digest.RepliedStore.mark(it) }
+            }
+        }
     }
 }
 
@@ -177,20 +186,21 @@ private fun DigestCards(ts: Long?, text: String) {
                 }
                 if (canReply) {
                     // Кнопки остаются всегда, и после ответа: можно ответить ещё раз или вернуть карточку в «не отвечено».
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
                         ActionPill(
                             when (it0.kind) { DigestKind.URGENT -> "Разобраться"; DigestKind.NOTE -> "Что сделать"; else -> "Ответить" },
                             accent = needs && !done,
+                            compact = true,
                         ) {
                             composing = if (composing == key) null else key
                             hint = null
                         }
-                        ActionPill("Предложить ответ") { send(DigestView.suggestTask(it0), false) }
-                        ActionPill("Пропустить") {
+                        ActionPill("Предложить ответ", compact = true) { send(DigestView.suggestTask(it0), false) }
+                        ActionPill("Пропустить", compact = true) {
                             skipped = com.rwai.agent.digest.SkippedStore.skip(key)
                             it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.mark(who.first) }
                         }
-                        if (done) ActionPill("Не отвечено") {
+                        if (done) ActionPill("Не отвечено", compact = true) {
                             answered = AnsweredStore.unmark(key)
                             it0.person()?.let { who -> com.rwai.agent.digest.RepliedStore.unmark(who.first) }
                         }
@@ -237,7 +247,7 @@ private fun DigestCards(ts: Long?, text: String) {
 }
 
 @Composable
-private fun NotificationItem(r: NotificationRow) {
+private fun NotificationItem(r: NotificationRow, onSkip: () -> Unit) {
     val ctx = LocalContext.current
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -254,12 +264,13 @@ private fun NotificationItem(r: NotificationRow) {
         Text(if (r.hidden) "[содержимое скрыто приложением]" else (r.body ?: ""), style = MaterialTheme.typography.bodyMedium)
         if (!r.tr.isNullOrBlank()) Text("↳ " + r.tr, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         if (!r.hidden && !who.isNullOrBlank()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                ActionPill("Ответить", accent = true) { AgentPrefill.text.value = "Ответь $who в ${r.app}: " }
-                ActionPill("Открыть") {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                ActionPill("Ответить", accent = true, compact = true) { AgentPrefill.text.value = "Ответь $who в ${r.app}: " }
+                ActionPill("Открыть", compact = true) {
                     val i = ctx.packageManager.getLaunchIntentForPackage(r.pkg)
                     if (i != null) ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
+                ActionPill("Пропустить", compact = true) { onSkip() }
             }
         }
     }

@@ -141,14 +141,14 @@ fun GlassCard(modifier: Modifier = Modifier, accent: Color? = null, content: @Co
 
 /** Маленькая кнопка‑«таблетка» для действий в карточках. */
 @Composable
-fun ActionPill(text: String, accent: Boolean = false, onClick: () -> Unit) {
+fun ActionPill(text: String, accent: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Box(
         modifier = Modifier.clip(shape)
             .then(if (accent) Modifier.background(accentBrush()) else Modifier.background(Color.White.copy(alpha = 0.08f)).border(1.dp, Color.White.copy(alpha = 0.14f), shape))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    ) { Text(text, style = MaterialTheme.typography.labelMedium, color = Color.White) }
+            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 6.dp else 7.dp),
+    ) { Text(text, style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, softWrap = false) }
 }
 
 @Composable

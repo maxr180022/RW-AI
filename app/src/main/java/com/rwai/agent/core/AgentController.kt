@@ -374,8 +374,33 @@ class AgentController(
             addChat(ChatRole.SYSTEM, "Предыдущая задача ещё выполняется. Дождитесь её завершения или нажмите «Стоп».")
             return
         }
+        // Быстрые действия: фонарик, громкость, будильник и т.п. выполняются прямо на телефоне, без DeepSeek. Не вышло или не то: дальше обычный путь через агента.
+        val quick = photos.isEmpty() && attach.isNullOrBlank() && pendingQuestion == null && QuickRouter.mayHandle(appContext, text)
+        if (quick) {
+            addChat(ChatRole.USER, text)
+            _state.update { it.copy(phase = Phase.RUNNING, status = "Разбираю команду…", task = text, steps = emptyList(), draft = null, confirmation = null) }
+            job = scope.launch {
+                val r = try { QuickRouter.handle(appContext, text) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+                if (r != null && r.ok) {
+                    addChat(ChatRole.AGENT, r.message)
+                    _state.update { it.copy(phase = Phase.IDLE, status = "Готов", task = null) }
+                    val sp = settings.current
+                    if (speak || sp.speakResults) try { speaker.speak(com.rwai.agent.logic.Speakable.clean(r.message, russian = sp.language.startsWith("ru")), sp.language) } catch (_: Throwable) { }
+                    return@launch
+                }
+                if (r != null) addChat(ChatRole.SYSTEM, r.message)
+                startAgent(text, photos, speak, attach, true)
+            }
+            return
+        }
+        startAgent(text, photos, speak, attach, false)
+    }
+
+    @Synchronized
+    private fun startAgent(text: String, photos: List<AttachedImage>, speak: Boolean, attach: String?, userShown: Boolean) {
         if (!settings.hasApiKey.value) {
             addChat(ChatRole.ERROR, "Сначала введите API-ключ DeepSeek: вкладка «Настройки».")
+            _state.update { it.copy(phase = Phase.IDLE, status = "Готов", task = null) }
             return
         }
         compactIfNeeded() // перед задачей освобождаем место в памяти диалога
@@ -394,7 +419,7 @@ class AgentController(
             own = appContext.packageName,
             detected = com.rwai.agent.accessibility.RwAccessibilityService.instance?.originPackage(),
         )
-        addChat(ChatRole.USER, text, photos.map { it.thumb })
+        if (!userShown) addChat(ChatRole.USER, text, photos.map { it.thumb })
         val taskId = System.currentTimeMillis()
         AgentService.start(appContext)
         _state.update { it.copy(phase = Phase.RUNNING, status = "Начинаю…", task = text, steps = emptyList(), draft = null, confirmation = null) }

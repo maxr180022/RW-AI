@@ -1,5 +1,6 @@
 package com.rwai.agent.ui
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,7 @@ private enum class Page(val title: String) {
     HUB("Параметры"),
     AI("DeepSeek и модель"),
     AGENT("Поведение агента"),
+    QUICK("Быстрые действия"),
     VOICE("Язык и голос"),
     CAR("Звук в машине (Bluetooth)"),
     PRIVACY("Сообщения и приватность"),
@@ -88,6 +90,7 @@ fun SettingsScreen() {
             when (page) {
                 Page.AI -> AiPage()
                 Page.AGENT -> AgentPage()
+                Page.QUICK -> QuickSettings()
                 Page.VOICE -> VoicePage()
                 Page.PRIVACY -> PrivacyPage()
                 Page.CAR -> CarAudioSettings()
@@ -136,6 +139,7 @@ private fun SettingsHub(onOpen: (Page) -> Unit) {
     fun summary(p: Page): String = when (p) {
         Page.AI -> (if (hasKey) "Ключ сохранён" else "Ключ не задан") + " · " + settings.model + if (settings.autoModel) " · автовыбор модели" else ""
         Page.AGENT -> settings.mode.title + " · после задачи: " + afterTaskLabel(settings.afterTask)
+        Page.QUICK -> if (com.rwai.agent.core.QuickRouter.enabled(ctx)) "Включено: фонарик, громкость, будильник, без токенов" else "Выключено"
         Page.VOICE -> languageLabel(settings.language) + " · озвучка итога: " + onOff(settings.speakResults)
         Page.CAR -> if (com.rwai.agent.audio.CallRouter.enabled(ctx)) "Включено: звонки не на машину" else "Выключено"
         Page.PRIVACY -> "Уведомления: " + onOff(settings.captureNotifications) + " · сводка: " + onOff(settings.digestEnabled) + " · автоперевод: " + onOff(settings.autoTranslate)
@@ -169,6 +173,29 @@ private fun SettingsHub(onOpen: (Page) -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
+        var shareNote by remember { mutableStateOf<String?>(null) }
+        Button(
+            onClick = {
+                scope.launch {
+                    try {
+                        val file = withContext(Dispatchers.IO) { com.rwai.agent.core.Diagnostics.write(ctx) }
+                        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        ctx.startActivity(Intent.createChooser(send, "Выгрузить логи").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        shareNote = "Файл логов готов: " + file.name + ". Ключи и личные данные из него вырезаны."
+                    } catch (e: Exception) {
+                        shareNote = "Не удалось собрать логи: " + e.javaClass.simpleName
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Выгрузить логи для диагностики") }
+        Text("Один файл: шаги агента, ошибки, быстрые действия, голос, звук звонков, версия и телефон. Без ключей и личных данных. Отправьте его в чат, чтобы я сразу увидел, что не так.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        shareNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth()) { Text("Удалить все данные Руся AI") }
         wipeNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         val version = remember { try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (_: Exception) { null } ?: "" }
