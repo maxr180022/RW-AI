@@ -96,4 +96,9 @@ class HeatTimelineTest {
         assertEquals("зарядка", e.suspects.first().type)
         assertTrue(e.suspects.first().label.contains("6.0 А") || e.suspects.first().label.contains("6,0 А"))
     }
+
+    @Test fun wattsFromCurrentAndVoltage() {
+        assertEquals(24.6f, HeatSample(0, 36f, 50, true, true, 6000, 4100).watts, 0.05f)
+        assertEquals(-1f, HeatSample(0, 36f, 50, true, true, 6000).watts, 0.01f)
+    }
 }

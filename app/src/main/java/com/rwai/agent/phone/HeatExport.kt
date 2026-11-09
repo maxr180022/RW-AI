@@ -43,10 +43,10 @@ object HeatExport {
         sb.append("\n=== Отметки «Нагрелся сейчас» ===\n")
         if (marks.isEmpty()) sb.append("нет\n") else marks.forEach { sb.append(t(it)).append('\n') }
 
-        sb.append("\n=== Замеры: время, температура °C, заряд %, зарядка, экран, ток мА ===\n")
+        sb.append("\n=== Замеры: время, температура °C, заряд %, зарядка, экран, ток мА, напряжение мВ, мощность Вт (батарея) ===\n")
         samples.forEach {
             sb.append(t(it.t)).append(',').append(it.tempC).append(',').append(it.pct).append(',')
-                .append(if (it.charging) "зарядка" else "-").append(',').append(if (it.screenOn) "экран" else "-").append(',').append(it.ma).append('\n')
+                .append(if (it.charging) "зарядка" else "-").append(',').append(if (it.screenOn) "экран" else "-").append(',').append(it.ma).append(',').append(it.mv).append(',').append(if (it.watts > 0) "%.1f".format(it.watts) else "-").append('\n')
         }
 
         sb.append("\n=== Периоды работы (от 1 минуты, до 900 записей): с, по, приложение, тип ===\n")

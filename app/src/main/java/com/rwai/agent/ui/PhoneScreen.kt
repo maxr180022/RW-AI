@@ -75,6 +75,12 @@ private fun batteryCurrentMa(c: Context): Int? = try {
     if (raw == 0L || raw == Long.MIN_VALUE) null else (if (raw > 20_000) raw / 1000 else raw).toInt()
 } catch (_: Exception) { null }
 
+private fun batteryVoltageMv(c: Context): Int? {
+    val i = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
+    val v = i.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+    return if (v <= 0) null else if (v < 100) v * 1000 else v
+}
+
 private fun thermalStatus(c: Context): Int =
     if (Build.VERSION.SDK_INT >= 29) (c.getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus else 0
 
@@ -212,6 +218,14 @@ fun PhoneScreen(resumeTick: Int) {
             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Состояние телефона", style = MaterialTheme.typography.titleMedium)
                 Text("Заряд: ${if (battery.pct >= 0) battery.pct.toString() + "%" else "—"}" + if (battery.charging) " · заряжается" else "")
+                if (battery.charging) {
+                    val ma = batteryCurrentMa(ctx)
+                    val mv = batteryVoltageMv(ctx)
+                    Text(
+                        if (ma != null && mv != null) "Зарядка сейчас: ${"%.1f".format(ma / 1000f)} А × ${"%.2f".format(mv / 1000f)} В ≈ ${"%.0f".format(ma / 1000f * mv / 1000f)} Вт (по датчику батареи, у розетки больше)"
+                        else "Зарядка сейчас: датчик тока недоступен",
+                    )
+                }
                 Text("Температура батареи: ${"%.1f".format(battery.tempC)} °C · ${thermalText(snapshot.thermalStatus)}")
                 if (settings.wakeEnabled) {
                     Text("«Окей, Руся» слушал сегодня: ${stats.first} мин")

@@ -5,7 +5,10 @@ import java.util.Date
 import java.util.Locale
 
 /** Один замер: температура батареи в момент [t] (мс). Пишется в фоне при каждом заметном изменении. */
-data class HeatSample(val t: Long, val tempC: Float, val pct: Int, val charging: Boolean, val screenOn: Boolean, val ma: Int = -1)
+data class HeatSample(val t: Long, val tempC: Float, val pct: Int, val charging: Boolean, val screenOn: Boolean, val ma: Int = -1, val mv: Int = -1) {
+    /** Мощность по датчику батареи (ток × напряжение), Вт; -1 — нет данных. Это сторона батареи, не розетки. */
+    val watts: Float get() = if (ma > 0 && mv > 0) ma / 1000f * (mv / 1000f) else -1f
+}
 
 /** Период активности: приложение на экране, служба переднего плана или работа локальной модели Руси. */
 data class ActivityInterval(val label: String, val type: String, val start: Long, val end: Long, val kind: String? = null)
@@ -101,7 +104,8 @@ object HeatTimeline {
             val run = samples.drop(idx).takeWhile { it.charging && it.t <= winEnd }
             val last = run.last()
             val maxMa = run.maxOf { it.ma }
-            val label = "Зарядка" + (if (maxMa > 0) ", ток до ${"%.1f".format(maxMa / 1000f)} А" else "") +
+            val maxW = run.maxOf { it.watts }
+            val label = "Зарядка" + (if (maxMa > 0) ", ток до ${"%.1f".format(maxMa / 1000f)} А" else "") + (if (maxW > 0) ", до ${"%.0f".format(maxW)} Вт" else "") +
                 (if (first.pct >= 0 && last.pct >= 0) ", заряд ${first.pct}→${last.pct}%" else "")
             return EpisodeSuspect(label, "зарядка", null, ((last.t - first.t) / MIN).toInt().coerceAtLeast(1), 0, first.t, last.t, HeatVerdict.LIKELY)
         }

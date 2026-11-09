@@ -57,11 +57,13 @@ object HeatLog {
                 val raw = kotlin.math.abs((c.applicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager).getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW))
                 if (raw == Long.MIN_VALUE) -1L else if (raw > 20_000L) raw / 1000 else raw
             } catch (_: Throwable) { -1L }
+            val mvRaw = i.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            val mv = if (mvRaw in 1..99) mvRaw * 1000 else mvRaw
             lastT = now
             lastTemp = temp
             synchronized(lock) {
                 val f = file(c)
-                f.appendText("$now,$temp,${if (level < 0) -1 else level * 100 / scale},${if (charging) 1 else 0},${if (screen) 1 else 0},$ma\n")
+                f.appendText("$now,$temp,${if (level < 0) -1 else level * 100 / scale},${if (charging) 1 else 0},${if (screen) 1 else 0},$ma,$mv\n")
                 if (f.length() > 200_000L) trim(f, now)
             }
         } catch (_: Throwable) {
@@ -95,7 +97,7 @@ object HeatLog {
                 if (p.size < 5) return@mapNotNull null
                 val t = p[0].toLongOrNull() ?: return@mapNotNull null
                 if (t < sinceMs) return@mapNotNull null
-                HeatSample(t, p[1].toFloatOrNull() ?: return@mapNotNull null, p[2].toIntOrNull() ?: -1, p[3] == "1", p[4] == "1", p.getOrNull(5)?.toIntOrNull() ?: -1)
+                HeatSample(t, p[1].toFloatOrNull() ?: return@mapNotNull null, p[2].toIntOrNull() ?: -1, p[3] == "1", p[4] == "1", p.getOrNull(5)?.toIntOrNull() ?: -1, p.getOrNull(6)?.toIntOrNull() ?: -1)
             }
         } catch (_: Throwable) { emptyList() }
     }
