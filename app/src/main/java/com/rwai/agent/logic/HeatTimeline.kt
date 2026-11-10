@@ -5,15 +5,35 @@ import java.util.Date
 import java.util.Locale
 
 /** Один замер: температура батареи в момент [t] (мс). Пишется в фоне при каждом заметном изменении. */
-data class HeatSample(val t: Long, val tempC: Float, val pct: Int, val charging: Boolean, val screenOn: Boolean, val ma: Int = -1, val mv: Int = -1) {
+data class HeatSample(
+    val t: Long, val tempC: Float, val pct: Int, val charging: Boolean, val screenOn: Boolean, val ma: Int = -1, val mv: Int = -1,
+    /** Тепловой статус системы Android: 0 нет ограничений, 1 лёгкое, 2 умеренное, 3 сильное и выше; -1 нет данных. */
+    val thermal: Int = -1,
+    /** Прогноз системы: насколько близко к порогу сильного ограничения мощности, % (100 = порог); -1 нет данных. */
+    val headroom: Int = -1,
+    /** Яркость экрана 0–255; -1 нет данных. */
+    val brightness: Int = -1,
+    /** Сеть: 0 нет, 1 Wi-Fi, 2 мобильная, 3 прочее; -1 нет данных. */
+    val net: Int = -1,
+) {
     /** Мощность по датчику батареи (ток × напряжение), Вт; -1 — нет данных. Это сторона батареи, не розетки. */
     val watts: Float get() = if (ma > 0 && mv > 0) ma / 1000f * (mv / 1000f) else -1f
+}
+
+/** Скорость зарядки: медленная до 10 Вт, средняя 10–20 Вт, быстрая от 20 Вт (мощность по датчику батареи). */
+enum class ChargeClass { UNKNOWN, SLOW, MEDIUM, FAST }
+
+/** Класс зарядки по мощности (Вт, -1 нет данных); если мощности нет, по току батареи (мА). */
+fun chargeClassOf(watts: Float, ma: Int): ChargeClass = when {
+    watts > 0f -> if (watts < 10f) ChargeClass.SLOW else if (watts < 20f) ChargeClass.MEDIUM else ChargeClass.FAST
+    ma > 0 -> if (ma < 2000) ChargeClass.SLOW else if (ma < 3500) ChargeClass.MEDIUM else ChargeClass.FAST
+    else -> ChargeClass.UNKNOWN
 }
 
 /** Период активности: приложение на экране, служба переднего плана или работа локальной модели Руси. */
 data class ActivityInterval(val label: String, val type: String, val start: Long, val end: Long, val kind: String? = null)
 
-enum class HeatVerdict { LIKELY, UNLIKELY }
+enum class HeatVerdict { LIKELY, POSSIBLE, UNLIKELY }
 
 /** Подозреваемый в одном нагреве: что работало, сколько в нагреве и сколько без нагрева. */
 data class EpisodeSuspect(
@@ -41,6 +61,11 @@ data class HeatEpisode(
     val suspects: List<EpisodeSuspect>,
     /** Нагрев отмечен вручную кнопкой «Нагрелся сейчас». */
     val marked: Boolean = false,
+    /** Во время нагрева шла быстрая зарядка (от 20 Вт): она и есть главная причина. */
+    val fastCharge: Boolean = false,
+    /** Наибольший тепловой статус Android за нагрев (-1 нет данных) и наибольшая близость к порогу, %. */
+    val maxThermal: Int = -1,
+    val peakHeadroom: Int = -1,
 )
 
 /**
@@ -94,20 +119,29 @@ object HeatTimeline {
             coolMin[key] = (cool / MIN).toInt().coerceAtLeast(0)
         }
 
-        // 4. Подозреваемые для каждого нагрева. Зарядка, включённая в это время, идёт первой: быстрая зарядка сама греет батарею.
+        // 4. Подозреваемые для каждого нагрева. Зарядка оценивается по мощности: быстрая (от 20 Вт) греет сама, медленная не причина.
         fun chargeSuspect(winStart: Long, winEnd: Long): EpisodeSuspect? {
-            val idx = samples.indices.firstOrNull { k ->
-                val x = samples[k]
-                x.charging && x.t in winStart..winEnd && (k == 0 || !samples[k - 1].charging)
-            } ?: return null
-            val first = samples[idx]
-            val run = samples.drop(idx).takeWhile { it.charging && it.t <= winEnd }
+            val run = samples.filter { it.charging && it.t in winStart..winEnd }
+            if (run.isEmpty()) return null
+            val first = run.first()
             val last = run.last()
             val maxMa = run.maxOf { it.ma }
-            val maxW = run.maxOf { it.watts }
-            val label = "Зарядка" + (if (maxMa > 0) ", ток до ${"%.1f".format(maxMa / 1000f)} А" else "") + (if (maxW > 0) ", до ${"%.0f".format(maxW)} Вт" else "") +
+            val watts = run.map { it.watts }.filter { it > 0f }.sorted()
+            val amps = run.map { it.ma }.filter { it > 0 }.sorted()
+            val medW = if (watts.isEmpty()) -1f else watts[watts.size / 2]
+            val maxW = if (watts.isEmpty()) -1f else watts.last()
+            val cls = chargeClassOf(medW, if (amps.isEmpty()) -1 else amps[amps.size / 2])
+            val word = when (cls) {
+                ChargeClass.FAST -> "быстрая"; ChargeClass.MEDIUM -> "средняя"; ChargeClass.SLOW -> "медленная"; ChargeClass.UNKNOWN -> "скорость неизвестна"
+            }
+            val label = "Зарядка $word" + (if (medW > 0) ", обычно ${"%.0f".format(medW)} Вт" else "") +
+                (if (maxW > medW + 3f) ", пик ${"%.0f".format(maxW)} Вт" else "") +
+                (if (maxMa > 0) ", ток до ${"%.1f".format(maxMa / 1000f)} А" else "") +
                 (if (first.pct >= 0 && last.pct >= 0) ", заряд ${first.pct}→${last.pct}%" else "")
-            return EpisodeSuspect(label, "зарядка", null, ((last.t - first.t) / MIN).toInt().coerceAtLeast(1), 0, first.t, last.t, HeatVerdict.LIKELY)
+            val verdict = when (cls) {
+                ChargeClass.FAST -> HeatVerdict.LIKELY; ChargeClass.SLOW -> HeatVerdict.UNLIKELY; else -> HeatVerdict.POSSIBLE
+            }
+            return EpisodeSuspect(label, "зарядка", null, ((last.t - first.t) / MIN).toInt().coerceAtLeast(1), 0, first.t, last.t, verdict)
         }
         fun suspectsIn(winStart: Long, winEnd: Long): List<EpisodeSuspect> {
             val suspects = ArrayList<EpisodeSuspect>()
@@ -127,15 +161,24 @@ object HeatTimeline {
                 compareBy<EpisodeSuspect> { it.verdict }
                     .thenByDescending { it.minInEpisode * (if (it.kind in setOf("игра", "видео", "карты")) 2 else 1) },
             )
-            return listOfNotNull(chargeSuspect(winStart, winEnd)) + ranked
+            val charge = chargeSuspect(winStart, winEnd)
+            return if (charge != null && charge.verdict != HeatVerdict.UNLIKELY) listOf(charge) + ranked else ranked + listOfNotNull(charge)
         }
+        fun thermalIn(a: Long, b: Long): Pair<Int, Int> {
+            val w = samples.filter { it.t in a..b }
+            return (w.maxOfOrNull { it.thermal } ?: -1) to (w.maxOfOrNull { it.headroom } ?: -1)
+        }
+        fun isFast(s: List<EpisodeSuspect>) = s.any { it.type == "зарядка" && it.verdict == HeatVerdict.LIKELY }
         val result = ArrayList<HeatEpisode>()
         for (d in drafts) {
             val rise = samples[d.riseIdx]
+            val sus = suspectsIn(rise.t - preMin * MIN, samples[d.b].t)
+            val (th, hr) = thermalIn(rise.t, samples[d.b].t)
             result += HeatEpisode(
                 riseStart = rise.t, runStart = samples[d.a].t, runEnd = samples[d.b].t, peakT = samples[d.peakIdx].t,
                 peakTemp = samples[d.peakIdx].tempC, baseTemp = rise.tempC,
-                chargingAtRise = rise.charging, screenOnAtRise = rise.screenOn, suspects = suspectsIn(rise.t - preMin * MIN, samples[d.b].t),
+                chargingAtRise = rise.charging, screenOnAtRise = rise.screenOn, suspects = sus,
+                fastCharge = isFast(sus), maxThermal = th, peakHeadroom = hr,
             )
         }
         // Нагревы, которые владелец отметил кнопкой: окно в 30 минут до отметки.
@@ -146,9 +189,12 @@ object HeatTimeline {
             if (near.isEmpty()) continue
             val base = near.minByOrNull { it.tempC }!!
             val peak = near.maxByOrNull { it.tempC }!!
+            val sus = suspectsIn(ws, mk)
+            val (th, hr) = thermalIn(ws, mk)
             result += HeatEpisode(
                 riseStart = ws, runStart = mk, runEnd = mk, peakT = peak.t, peakTemp = peak.tempC, baseTemp = base.tempC,
-                chargingAtRise = near.first().charging, screenOnAtRise = near.first().screenOn, suspects = suspectsIn(ws, mk), marked = true,
+                chargingAtRise = near.first().charging, screenOnAtRise = near.first().screenOn, suspects = sus, marked = true,
+                fastCharge = isFast(sus), maxThermal = th, peakHeadroom = hr,
             )
         }
         return result.sortedBy { it.riseStart }
@@ -203,6 +249,8 @@ object HeatTimeline {
         for ((_, group) in list.groupBy { it.label to it.type }) {
             var cur: ActivityInterval? = null
             for (iv in group.sortedBy { it.start }) {
+                // Приложение не бывает на экране больше 6 часов подряд: это обрывок журнала Android, а не работа.
+                if (iv.type == "экран" && iv.end - iv.start > 6 * 3_600_000L) continue
                 val c = ActivityInterval(iv.label, iv.type, maxOf(iv.start, cover.first), minOf(iv.end, cover.second), iv.kind)
                 if (c.end <= c.start) continue
                 val p = cur
@@ -211,6 +259,38 @@ object HeatTimeline {
             }
             cur?.let { out += it }
         }
+        return out
+    }
+
+    private val thermalNames = listOf("нет ограничений", "лёгкое", "умеренное", "сильное", "критическое", "аварийное", "выключение")
+
+    /** Что про этот нагрев сказала сама система Android (тепловой статус и близость к порогу), если это записано. */
+    fun thermalLine(e: HeatEpisode): String? {
+        if (e.maxThermal < 0 && e.peakHeadroom < 0) return null
+        val st = if (e.maxThermal >= 0) "ограничение мощности: ${thermalNames.getOrElse(e.maxThermal) { "статус ${e.maxThermal}" }}" else null
+        val hr = if (e.peakHeadroom >= 0) "близость к порогу сильного ограничения ${e.peakHeadroom}% (100% = порог)" else null
+        return "Тепловая защита Android: " + listOfNotNull(st, hr).joinToString("; ")
+    }
+
+    /** Итог по всем нагревам: сколько от быстрой зарядки, сколько без неё и что чаще всего работало в остальных. */
+    fun summary(eps: List<HeatEpisode>): List<String> {
+        if (eps.isEmpty()) return emptyList()
+        val out = ArrayList<String>()
+        val rest = eps.filter { !it.fastCharge }
+        out += "Нагревов: ${eps.size}. При быстрой зарядке: ${eps.size - rest.size}, без неё: ${rest.size}."
+        if (rest.isNotEmpty()) {
+            val counts = HashMap<String, Int>()
+            for (e in rest) e.suspects.filter { it.type != "зарядка" && it.verdict != HeatVerdict.UNLIKELY && it.minInEpisode >= 5 }
+                .map { it.label }.distinct().forEach { counts[it] = (counts[it] ?: 0) + 1 }
+            val top = counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(6)
+            if (top.isNotEmpty()) {
+                out += "В нагревах без быстрой зарядки одновременно работали: " + top.joinToString(", ") { "${it.key} (${it.value} из ${rest.size})" } +
+                    ". Это совпадение по времени, а не прямой замер процессора: Android не отдаёт приложениям нагрузку других приложений."
+            }
+        }
+        val withTh = eps.filter { it.maxThermal >= 0 }
+        out += if (withTh.isEmpty()) "Тепловой статус Android в этих нагревах не записан (появится в новых замерах)."
+        else "Система сама ограничивала мощность (умеренно или сильнее) в ${withTh.count { it.maxThermal >= 2 }} из ${withTh.size} нагревов."
         return out
     }
 
@@ -225,7 +305,11 @@ object HeatTimeline {
             (if (e.chargingAtRise) ", на зарядке" else "") + (if (e.screenOnAtRise) ", экран включён" else ", экран выключен")
 
     fun line(s: EpisodeSuspect): String {
-        if (s.type == "зарядка") return "${s.label}, с ${hm(s.firstStart)} по ${hm(s.lastEnd)}: сама зарядка греет батарею, особенно быстрая; вероятная причина"
+        if (s.type == "зарядка") return "${s.label}, с ${hm(s.firstStart)} по ${hm(s.lastEnd)}: " + when (s.verdict) {
+            HeatVerdict.LIKELY -> "быстрая зарядка сама греет батарею; вероятная причина"
+            HeatVerdict.POSSIBLE -> "греет умеренно; возможная причина"
+            HeatVerdict.UNLIKELY -> "зарядка медленная, сама так не греет; не причина"
+        }
         val what = when (s.type) {
             "служба" -> "работал в фоне (служба)"
             "модель" -> "считала локальная модель"

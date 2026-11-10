@@ -103,8 +103,10 @@ fun HeatHistoryCard(resumeTick: Int) {
                 if (episodes.isEmpty()) {
                     Text("Нагревов выше 37,5 °C за записанное время не было (макс. ${"%.1f".format(samples.maxOf { it.tempC })} °C).", style = MaterialTheme.typography.bodyMedium)
                 }
+                HeatTimeline.summary(episodes).forEach { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
                 episodes.asReversed().forEach { e ->
                     Text(HeatTimeline.title(e), fontWeight = FontWeight.SemiBold)
+                    HeatTimeline.thermalLine(e)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     if (e.suspects.isEmpty()) {
                         Text("В это время не вижу ни приложений на экране, ни служб в фоне." + if (usageOk) "" else " Нет «Доступа к статистике».", style = MaterialTheme.typography.bodyMedium)
                     } else {

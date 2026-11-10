@@ -146,9 +146,9 @@ object PhoneScan {
                 val key = pkg + "/" + (e.className ?: "")
                 when (e.eventType) {
                     1 -> openFg[key] = e.timeStamp
-                    2 -> add(key, openFg.remove(key) ?: from, e.timeStamp, "экран")
+                    2 -> openFg.remove(key)?.let { add(key, it, e.timeStamp, "экран") } // остановка без начала: начала не знаем, выдумывать «с начала окна» нельзя
                     19 -> openSvc[key] = e.timeStamp
-                    20 -> add(key, openSvc.remove(key) ?: from, e.timeStamp, "служба")
+                    20 -> openSvc.remove(key)?.let { add(key, it, e.timeStamp, "служба") }
                 }
             }
         } catch (_: Exception) { return out }

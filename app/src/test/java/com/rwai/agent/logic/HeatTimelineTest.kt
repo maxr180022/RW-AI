@@ -101,4 +101,51 @@ class HeatTimelineTest {
         assertEquals(24.6f, HeatSample(0, 36f, 50, true, true, 6000, 4100).watts, 0.05f)
         assertEquals(-1f, HeatSample(0, 36f, 50, true, true, 6000).watts, 0.01f)
     }
+
+    private fun chargingSamples(ma: Int, mv: Int) = (0..60 step 5).map { m ->
+        HeatSample(t0 + m * min, if (m < 20) 35f else 35f + (m - 20) * 0.2f, 40 + m / 5, true, true, ma, mv)
+    }
+
+    @Test fun slowChargingIsNotBlamedForHeat() {
+        val e = HeatTimeline.episodes(chargingSamples(1300, 4000), listOf(iv("Навигатор", "экран", 20, 60, kind = "карты"))).single()
+        assertTrue(!e.fastCharge)
+        val ch = e.suspects.first { it.type == "зарядка" }
+        assertEquals(HeatVerdict.UNLIKELY, ch.verdict)
+        assertEquals("Навигатор", e.suspects.first().label)
+        assertTrue(HeatTimeline.line(ch).contains("медленная"))
+    }
+
+    @Test fun fastChargingIsTheFirstSuspect() {
+        val e = HeatTimeline.episodes(chargingSamples(7800, 4000), emptyList()).single()
+        assertTrue(e.fastCharge)
+        assertEquals(HeatVerdict.LIKELY, e.suspects.first().verdict)
+        assertTrue(e.suspects.first().label.contains("быстрая"))
+    }
+
+    @Test fun chargeClassByPower() {
+        assertEquals(ChargeClass.SLOW, chargeClassOf(5f, 1300))
+        assertEquals(ChargeClass.MEDIUM, chargeClassOf(15f, 3800))
+        assertEquals(ChargeClass.FAST, chargeClassOf(31f, 7800))
+        assertEquals(ChargeClass.FAST, chargeClassOf(-1f, 6000))
+        assertEquals(ChargeClass.UNKNOWN, chargeClassOf(-1f, -1))
+    }
+
+    @Test fun screenIntervalLongerThanSixHoursIsDropped() {
+        val s = samples(0 to 34f, 480 to 34f, 510 to 40f, 570 to 40f, 640 to 34f)
+        val e = HeatTimeline.episodes(s, listOf(iv("Обрывок", "экран", 0, 600))).single()
+        assertTrue(e.suspects.none { it.label == "Обрывок" })
+    }
+
+    @Test fun summarySeparatesFastChargeFromLoad() {
+        val text = HeatTimeline.summary(HeatTimeline.episodes(chargingSamples(7800, 4000), emptyList())).joinToString("\n")
+        assertTrue(text.contains("Нагревов: 1"))
+        assertTrue(text.contains("При быстрой зарядке: 1"))
+    }
+
+    @Test fun thermalStatusIsReportedPerEpisode() {
+        val s = chargingSamples(1300, 4000).map { it.copy(thermal = 2, headroom = 90) }
+        val e = HeatTimeline.episodes(s, emptyList()).single()
+        assertEquals(2, e.maxThermal)
+        assertTrue(HeatTimeline.thermalLine(e)!!.contains("умеренное"))
+    }
 }

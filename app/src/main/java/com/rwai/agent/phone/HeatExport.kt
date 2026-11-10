@@ -27,11 +27,16 @@ object HeatExport {
         sb.append("Замеров: ").append(samples.size).append(", периодов активности: ").append(intervals.size)
             .append(", отметок «нагрелся»: ").append(marks.size).append(", доступ к статистике: ").append(PhoneScan.hasUsageAccess(ctx)).append('\n')
 
-        sb.append("\n=== Нагревы (выше 37,5 °C и отметки) ===\n")
         val eps = HeatTimeline.episodes(samples, intervals, marks = marks)
+        sb.append("\n=== Итог ===\n")
+        val sum = HeatTimeline.summary(eps)
+        if (sum.isEmpty()) sb.append("нагревов нет\n") else sum.forEach { sb.append(it).append('\n') }
+        sb.append("Зарядка: медленная до 10 Вт, средняя 10–20 Вт, быстрая от 20 Вт (мощность по датчику батареи, берётся медиана за нагрев).\n")
+        sb.append("\n=== Нагревы (выше 37,5 °C и отметки) ===\n")
         if (eps.isEmpty()) sb.append("нет\n")
         eps.forEach { e ->
             sb.append(HeatTimeline.title(e)).append('\n')
+            HeatTimeline.thermalLine(e)?.let { sb.append("   ").append(it).append('\n') }
             e.suspects.take(10).forEach { sb.append("   - ").append(HeatTimeline.line(it)).append('\n') }
         }
 
@@ -43,10 +48,11 @@ object HeatExport {
         sb.append("\n=== Отметки «Нагрелся сейчас» ===\n")
         if (marks.isEmpty()) sb.append("нет\n") else marks.forEach { sb.append(t(it)).append('\n') }
 
-        sb.append("\n=== Замеры: время, температура °C, заряд %, зарядка, экран, ток мА, напряжение мВ, мощность Вт (батарея) ===\n")
+        sb.append("\n=== Замеры: время, температура °C, заряд %, зарядка, экран, ток мА, напряжение мВ, мощность Вт (батарея), тепловой статус Android (-1 нет данных), близость к порогу %, яркость 0-255, сеть (0 нет, 1 Wi-Fi, 2 мобильная) ===\n")
         samples.forEach {
             sb.append(t(it.t)).append(',').append(it.tempC).append(',').append(it.pct).append(',')
-                .append(if (it.charging) "зарядка" else "-").append(',').append(if (it.screenOn) "экран" else "-").append(',').append(it.ma).append(',').append(it.mv).append(',').append(if (it.watts > 0) "%.1f".format(it.watts) else "-").append('\n')
+                .append(if (it.charging) "зарядка" else "-").append(',').append(if (it.screenOn) "экран" else "-").append(',').append(it.ma).append(',').append(it.mv).append(',').append(if (it.watts > 0) "%.1f".format(it.watts) else "-")
+                .append(',').append(it.thermal).append(',').append(it.headroom).append(',').append(it.brightness).append(',').append(it.net).append('\n')
         }
 
         sb.append("\n=== Периоды работы (от 1 минуты, до 900 записей): с, по, приложение, тип ===\n")

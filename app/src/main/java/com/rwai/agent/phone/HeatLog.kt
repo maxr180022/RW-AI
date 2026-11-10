@@ -4,8 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import com.rwai.agent.logic.HeatSample
 import java.io.File
 
@@ -52,7 +56,20 @@ object HeatLog {
             val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             val plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
             val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || plugged != 0
-            val screen = (c.applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+            val pmgr = c.applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val screen = pmgr.isInteractive
+            // Что про нагрев говорит сама система (без новых разрешений): тепловой статус и близость к порогу ограничения мощности.
+            val thermal = if (Build.VERSION.SDK_INT >= 29) try { pmgr.currentThermalStatus } catch (_: Throwable) { -1 } else -1
+            val headroom = if (Build.VERSION.SDK_INT >= 30) try {
+                val h = pmgr.getThermalHeadroom(0)
+                if (h.isNaN()) -1 else (h * 100f).toInt().coerceIn(0, 999)
+            } catch (_: Throwable) { -1 } else -1
+            val brightness = try { Settings.System.getInt(c.applicationContext.contentResolver, Settings.System.SCREEN_BRIGHTNESS, -1) } catch (_: Throwable) { -1 }
+            val net = try {
+                val cm = c.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+                if (caps == null) 0 else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) 1 else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) 2 else 3
+            } catch (_: Throwable) { -1 }
             val ma = try {
                 val raw = kotlin.math.abs((c.applicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager).getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW))
                 if (raw == Long.MIN_VALUE) -1L else if (raw > 20_000L) raw / 1000 else raw
@@ -63,7 +80,7 @@ object HeatLog {
             lastTemp = temp
             synchronized(lock) {
                 val f = file(c)
-                f.appendText("$now,$temp,${if (level < 0) -1 else level * 100 / scale},${if (charging) 1 else 0},${if (screen) 1 else 0},$ma,$mv\n")
+                f.appendText("$now,$temp,${if (level < 0) -1 else level * 100 / scale},${if (charging) 1 else 0},${if (screen) 1 else 0},$ma,$mv,$thermal,$headroom,$brightness,$net\n")
                 if (f.length() > 200_000L) trim(f, now)
             }
         } catch (_: Throwable) {
@@ -97,7 +114,8 @@ object HeatLog {
                 if (p.size < 5) return@mapNotNull null
                 val t = p[0].toLongOrNull() ?: return@mapNotNull null
                 if (t < sinceMs) return@mapNotNull null
-                HeatSample(t, p[1].toFloatOrNull() ?: return@mapNotNull null, p[2].toIntOrNull() ?: -1, p[3] == "1", p[4] == "1", p.getOrNull(5)?.toIntOrNull() ?: -1, p.getOrNull(6)?.toIntOrNull() ?: -1)
+                HeatSample(t, p[1].toFloatOrNull() ?: return@mapNotNull null, p[2].toIntOrNull() ?: -1, p[3] == "1", p[4] == "1", p.getOrNull(5)?.toIntOrNull() ?: -1, p.getOrNull(6)?.toIntOrNull() ?: -1,
+                    p.getOrNull(7)?.toIntOrNull() ?: -1, p.getOrNull(8)?.toIntOrNull() ?: -1, p.getOrNull(9)?.toIntOrNull() ?: -1, p.getOrNull(10)?.toIntOrNull() ?: -1)
             }
         } catch (_: Throwable) { emptyList() }
     }
