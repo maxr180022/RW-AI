@@ -262,6 +262,44 @@ object HeatTimeline {
         return out
     }
 
+    /** Условие и температура замеров вне зарядки с ним и без него. */
+    data class Condition(val label: String, val yes: Int, val no: Int, val tYes: Float, val tNo: Float, val hotYes: Int, val hotNo: Int) {
+        val diff get() = tYes - tNo
+        val notable get() = diff >= 1.5f
+    }
+
+    /**
+     * При каких условиях телефон горячее: только замеры не на зарядке (зарядка не мешает), для каждого условия средняя температура
+     * и доля замеров выше порога с ним и без него. Это сравнение измеренных величин (яркость, сеть) и совпадений (Android Auto, карты, видео), а не прямая причина.
+     */
+    fun conditions(samplesIn: List<HeatSample>, intervalsIn: List<ActivityInterval>, hot: Float = 37.5f, minSide: Int = 8): List<Condition> {
+        val all = samplesIn.filter { !it.charging }
+        if (all.size < 2 * minSide) return emptyList()
+        val ivs = intervalsIn.filter { !(it.type == "экран" && it.end - it.start > 6 * 3_600_000L) }
+        fun on(t: Long, test: (ActivityInterval) -> Boolean) = ivs.any { test(it) && t >= it.start && t <= it.end }
+        val out = ArrayList<Condition>()
+        fun add(label: String, pool: List<HeatSample>, pred: (HeatSample) -> Boolean) {
+            val (y, n) = pool.partition(pred)
+            if (y.size < minSide || n.size < minSide) return
+            fun hotPct(l: List<HeatSample>) = 100 * l.count { it.tempC >= hot } / l.size
+            out += Condition(label, y.size, n.size, y.map { it.tempC }.average().toFloat(), n.map { it.tempC }.average().toFloat(), hotPct(y), hotPct(n))
+        }
+        val screen = all.filter { it.screenOn }
+        add("Экран включён (против выключенного)", all) { it.screenOn }
+        add("Яркость от 150 из 255 (против меньшей)", screen.filter { it.brightness >= 0 }) { it.brightness >= 150 }
+        add("Мобильная сеть (против Wi-Fi)", screen.filter { it.net == 1 || it.net == 2 }) { it.net == 2 }
+        add("Работает Android Auto", screen) { s -> on(s.t) { it.label == "Android Auto" && it.type == "служба" } }
+        add("Работает навигатор или карты", screen) { s -> on(s.t) { it.kind == "карты" && it.type == "служба" } }
+        add("Видео на экране", screen) { s -> on(s.t) { it.kind == "видео" && it.type == "экран" } }
+        return out.sortedByDescending { it.diff }
+    }
+
+    fun conditionLine(c: Condition): String {
+        val f = { v: Float -> "%.1f".format(v) }
+        val verdict = if (c.notable) "заметно горячее" else "разницы почти нет"
+        return "${c.label}: средняя температура ${f(c.tYes)} °C против ${f(c.tNo)} °C; выше 37,5 °C в ${c.hotYes}% замеров против ${c.hotNo}% (замеров ${c.yes} и ${c.no}); $verdict"
+    }
+
     private val thermalNames = listOf("нет ограничений", "лёгкое", "умеренное", "сильное", "критическое", "аварийное", "выключение")
 
     /** Что про этот нагрев сказала сама система Android (тепловой статус и близость к порогу), если это записано. */
@@ -280,7 +318,7 @@ object HeatTimeline {
         out += "Нагревов: ${eps.size}. При быстрой зарядке: ${eps.size - rest.size}, без неё: ${rest.size}."
         if (rest.isNotEmpty()) {
             val counts = HashMap<String, Int>()
-            for (e in rest) e.suspects.filter { it.type != "зарядка" && it.verdict != HeatVerdict.UNLIKELY && it.minInEpisode >= 5 }
+            for (e in rest) e.suspects.filter { it.type != "зарядка" && it.verdict != HeatVerdict.UNLIKELY && it.minInEpisode >= 10 }
                 .map { it.label }.distinct().forEach { counts[it] = (counts[it] ?: 0) + 1 }
             val top = counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(6)
             if (top.isNotEmpty()) {

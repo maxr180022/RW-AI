@@ -142,6 +142,17 @@ class HeatTimelineTest {
         assertTrue(text.contains("При быстрой зарядке: 1"))
     }
 
+    @Test fun conditionsShowBrightnessEffect() {
+        val s = (0..200 step 5).map { m ->
+            val b = m in 100..160
+            HeatSample(t0 + m * min, if (b) 38f else 34f, 50, false, true, 500, 4000, brightness = if (b) 220 else 60, net = 1)
+        }
+        val c = HeatTimeline.conditions(s, emptyList()).first { it.label.startsWith("Яркость") }
+        assertTrue(c.notable)
+        assertEquals(100, c.hotYes)
+        assertEquals(0, c.hotNo)
+    }
+
     @Test fun thermalStatusIsReportedPerEpisode() {
         val s = chargingSamples(1300, 4000).map { it.copy(thermal = 2, headroom = 90) }
         val e = HeatTimeline.episodes(s, emptyList()).single()

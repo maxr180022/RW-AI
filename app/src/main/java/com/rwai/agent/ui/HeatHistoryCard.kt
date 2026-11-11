@@ -1,6 +1,8 @@
 package com.rwai.agent.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,7 @@ fun HeatHistoryCard(resumeTick: Int) {
     var samples by remember { mutableStateOf<List<HeatSample>>(emptyList()) }
     var episodes by remember { mutableStateOf<List<HeatEpisode>>(emptyList()) }
     var culprits by remember { mutableStateOf<List<HeatTimeline.Culprit>>(emptyList()) }
+    var conds by remember { mutableStateOf<List<HeatTimeline.Condition>>(emptyList()) }
     var shareNote by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     val usageOk = remember(resumeTick) { PhoneScan.hasUsageAccess(ctx) }
@@ -60,6 +63,7 @@ fun HeatHistoryCard(resumeTick: Int) {
             samples = s
             episodes = HeatTimeline.episodes(s, iv, marks = HeatLog.marks(ctx, from))
             culprits = HeatTimeline.culprits(s, iv)
+            conds = HeatTimeline.conditions(s, iv)
         }
         loaded = true
     }
@@ -83,7 +87,7 @@ fun HeatHistoryCard(resumeTick: Int) {
                 val t1 = maxOf(samples.last().t, t0 + 60_000L)
                 val lo = minOf(30f, samples.minOf { it.tempC } - 1f)
                 val hi = maxOf(40f, samples.maxOf { it.tempC } + 1f)
-                Canvas(modifier = Modifier.fillMaxWidth().height(110.dp)) {
+                Canvas(modifier = Modifier.fillMaxWidth().height(70.dp)) {
                     fun x(t: Long) = size.width * (t - t0).toFloat() / (t1 - t0).toFloat()
                     fun y(v: Float) = size.height * (1f - (v - lo) / (hi - lo))
                     episodes.forEach { e ->
@@ -100,19 +104,27 @@ fun HeatHistoryCard(resumeTick: Int) {
                     Text("серая линия: 37,5 °C", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(HeatTimeline.hm(t1), style = MaterialTheme.typography.bodySmall)
                 }
-                if (episodes.isEmpty()) {
-                    Text("Нагревов выше 37,5 °C за записанное время не было (макс. ${"%.1f".format(samples.maxOf { it.tempC })} °C).", style = MaterialTheme.typography.bodyMedium)
-                }
-                HeatTimeline.summary(episodes).forEach { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
-                episodes.asReversed().forEach { e ->
-                    Text(HeatTimeline.title(e), fontWeight = FontWeight.SemiBold)
-                    HeatTimeline.thermalLine(e)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    if (e.suspects.isEmpty()) {
-                        Text("В это время не вижу ни приложений на экране, ни служб в фоне." + if (usageOk) "" else " Нет «Доступа к статистике».", style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        e.suspects.take(6).forEach { Text("• " + HeatTimeline.line(it), style = MaterialTheme.typography.bodyMedium) }
+            }
+            // Всё, кроме графика и кнопок, лежит в окне с прокруткой: карточка не занимает весь экран.
+            Column(modifier = Modifier.fillMaxWidth().height(200.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (samples.size >= 2) {
+                    if (episodes.isEmpty()) {
+                        Text("Нагревов выше 37,5 °C за записанное время не было (макс. ${"%.1f".format(samples.maxOf { it.tempC })} °C).", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    HeatTimeline.summary(episodes).forEach { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
+                    episodes.asReversed().forEach { e ->
+                        Text(HeatTimeline.title(e), fontWeight = FontWeight.SemiBold)
+                        HeatTimeline.thermalLine(e)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (e.suspects.isEmpty()) {
+                            Text("В это время не вижу ни приложений на экране, ни служб в фоне." + if (usageOk) "" else " Нет «Доступа к статистике».", style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            e.suspects.take(6).forEach { Text("• " + HeatTimeline.line(it), style = MaterialTheme.typography.bodyMedium) }
+                        }
                     }
                 }
+            if (conds.isNotEmpty()) {
+                Text("При каких условиях горячее (не на зарядке)", style = MaterialTheme.typography.titleSmall)
+                conds.forEach { Text("• " + HeatTimeline.conditionLine(it), style = MaterialTheme.typography.bodyMedium) }
             }
             Text("Кто сажает батарею и греет (по замерам)", style = MaterialTheme.typography.titleSmall)
             if (culprits.isEmpty()) {
@@ -128,6 +140,7 @@ fun HeatHistoryCard(resumeTick: Int) {
                     fontWeight = FontWeight.SemiBold,
                 )
                 (if (bad.isEmpty()) culprits.take(4) else bad.take(8)).forEach { Text("• " + HeatTimeline.culpritLine(it), style = MaterialTheme.typography.bodyMedium) }
+            }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { scope.launch { withContext(Dispatchers.Default) { HeatLog.addMark(ctx) }; load() } }) { Text("Нагрелся сейчас") }
