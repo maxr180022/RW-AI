@@ -36,6 +36,13 @@ class QuickActionsTest {
         assertEquals(QuickAction.Alarm(7, 30), m("заведи будильник на 7 30"))
         assertEquals(QuickAction.Alarm(19, 15), m("поставь будильник на 7:15 вечера"))
         assertEquals(QuickAction.Alarm(0, 5), m("поставь будильник на 12:05 ночи"))
+        assertEquals(QuickAction.Alarm(7, 20), m("поставь будильник на 7:00 утра 20 минут"))
+        assertEquals(QuickAction.Alarm(7, 20), m("поставь будильник на 7 утра 20 минут"))
+        assertEquals(QuickAction.Alarm(7, 20), m("поставь будильник на 7 утра и 20 минут"))
+        assertEquals(QuickAction.Alarm(7, 20), m("поставь будильник на 7 часов 20 минут"))
+        assertEquals(QuickAction.Alarm(19, 45), m("заведи будильник на 7 вечера 45 минут"))
+        assertEquals(QuickAction.Alarm(7, 0), m("поставь будильник на 7 часов"))
+        assertNull(m("поставь будильник на 7:30 утра 20 минут"))
         assertNull(m("поставь будильник на 25:00"))
         assertNull(m("поставь будильник на 8 и напиши Саше"))
     }

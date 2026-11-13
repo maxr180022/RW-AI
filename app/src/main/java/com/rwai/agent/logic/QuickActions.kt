@@ -74,7 +74,9 @@ object QuickRules {
     private val volWord = Regex("^(поставь|сделай|установи|выставь) (громкость|звук)( музыки| мультимедиа)? на (максимум|минимум|половину|полную)$")
     private val volUp = Regex("^((сделай )?(громче|погромче)( звук| музыку)?|(прибавь|увеличь|добавь) (громкость|звук))$")
     private val volDown = Regex("^((сделай )?(тише|потише)( звук| музыку)?|(убавь|уменьши|понизь) (громкость|звук))$")
-    private val alarm = Regex("^(поставь|заведи|установи|сделай|включи) (мне )?будильник на (\\d{1,2})(?:[: .](\\d{2}))?( утра| вечера| дня| ночи)?$")
+    // «на 7 утра», «на 7:15 вечера», «на 7 утра 20 минут», «на 7 часов 20 минут». Распознавание речи пишет «7 утра» как «7:00 утра»,
+    // поэтому «:00» перед фразой «N минут» не считается минутами: побеждают сказанные минуты.
+    private val alarm = Regex("^(поставь|заведи|установи|сделай|включи) (мне )?будильник (?:на|в) (\\d{1,2})(?:[: .](\\d{2}))?(?: часов| часа| час)?( утра| вечера| дня| ночи)?(?: и)?(?: (\\d{1,2}) ?мин\\p{L}*)?( утра| вечера| дня| ночи)?$")
     private val timer = Regex("^(поставь|заведи|запусти|включи|засеки) (мне )?таймер на (\\d{1,4}) (секунд\\p{L}*|сек|минут\\p{L}*|мин|час\\p{L}*)$")
     private val timerWord = Regex("^(поставь|заведи|запусти|включи|засеки) (мне )?таймер на (полчаса|час)$")
     private val openApp = Regex("^(открой|запусти|открыть) (приложение )?(.{2,30})$")
@@ -119,8 +121,11 @@ object QuickRules {
         if (volDown.matches(s)) return QuickAction.MediaVolume(null, -2)
         alarm.matchEntire(s)?.let { m ->
             var h = m.groupValues[3].toIntOrNull() ?: return null
-            val min = m.groupValues[4].ifEmpty { "0" }.toIntOrNull() ?: return null
-            when (m.groupValues[5].trim()) {
+            val said = m.groupValues[6]
+            // «7:30 утра 20 минут» непонятно: так не угадываем, пусть разберёт агент.
+            if (said.isNotEmpty() && m.groupValues[4].isNotEmpty() && m.groupValues[4] != "00") return null
+            val min = (if (said.isNotEmpty()) said else m.groupValues[4].ifEmpty { "0" }).toIntOrNull() ?: return null
+            when ((m.groupValues[5].ifEmpty { m.groupValues[7] }).trim()) {
                 "вечера", "дня" -> if (h < 12) h += 12
                 "утра", "ночи" -> if (h == 12) h = 0
             }
